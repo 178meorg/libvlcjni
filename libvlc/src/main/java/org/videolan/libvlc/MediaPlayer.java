@@ -1321,6 +1321,39 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     }
 
     /**
+     * Gets currently selected teletext page.
+     * @return the currently selected teletext page.
+     */
+    public int getTeletext() {
+        return nativeGetTeletext();
+    };
+
+    /**
+     * Select a teletext page.
+     * If telexext was not active, activate teletext.
+     * @param page: page to change to
+     */
+    public void setTeletext(int page) {
+        nativeSetTeletext(page);
+    };
+
+    /**
+     * Get current teletext background transparency.
+     * @return true if teletext is currently active and transparent, false if teletext is opaque or not active.
+     */
+    public boolean getTeletextTransparency() {
+        return nativeGetTeletextTransparency();
+    };
+
+    /**
+     * Set teletext background transparency.
+     * @param transparent: true for transparent, false for opaque
+     */
+    public void setTeletextTransparency(boolean transparent) {
+        nativeSetTeletextTransparency(transparent);
+    };
+
+    /**
      * Gets current movie's length in ms.
      * @return the movie length (in ms), or -1 if there is no media.
      */
@@ -1438,4 +1471,8 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     private native boolean nativeAddSlave(int type, String location, boolean select);
     private native boolean nativeRecord(String directory);
     private native boolean nativeSetEqualizer(Equalizer equalizer);
+    private native int nativeGetTeletext();
+    private native void nativeSetTeletext(int page);
+    private native boolean nativeGetTeletextTransparency();
+    private native void nativeSetTeletextTransparency(boolean transparent);
 }
