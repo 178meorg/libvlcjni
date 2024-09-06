@@ -130,12 +130,13 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
         mMediaPlayer.getVLCVout().detachViews();
     }
 
-    private void changeMediaPlayerLayout(int displayW, int displayH) {
+    private void changeMediaPlayerLayout() {
         if (mMediaPlayer.isReleased()) return;
 
         if (mCurrentScaleCustom) {
             mMediaPlayer.setAspectRatio(null);
             mMediaPlayer.setNativeScale(mCustomScale);
+            mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.None);
             return;
         }
 
@@ -144,75 +145,62 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
             case SURFACE_BEST_FIT:
                 mMediaPlayer.setAspectRatio(null);
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
-            case SURFACE_FIT_SCREEN: {
-                IMedia.VideoTrack vtrack = (IMedia.VideoTrack) mMediaPlayer.getSelectedTrack(Media.Track.Type.Video);
-                if (vtrack == null)
-                    return;
-                final boolean videoSwapped = vtrack.orientation == IMedia.VideoTrack.Orientation.LeftBottom
-                        || vtrack.orientation == IMedia.VideoTrack.Orientation.RightTop;
-                int videoW = vtrack.width;
-                int videoH = vtrack.height;
-
-                if (videoSwapped) {
-                    int swap = videoW;
-                    videoW = videoH;
-                    videoH = swap;
-                }
-                if (vtrack.sarNum != vtrack.sarDen)
-                    videoW = videoW * vtrack.sarNum / vtrack.sarDen;
-
-                float ar = videoW / (float) videoH;
-                float dar = displayW / (float) displayH;
-
-                float scale;
-                if (dar >= ar)
-                    scale = displayW / (float) videoW; /* horizontal */
-                else
-                    scale = displayH / (float) videoH; /* vertical */
-                mMediaPlayer.setNativeScale(scale);
+            case SURFACE_FIT_SCREEN:
+                mMediaPlayer.setNativeScale(0);
                 mMediaPlayer.setAspectRatio(null);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Larger);
                 break;
-            }
             case SURFACE_FILL:
                 mMediaPlayer.setNativeScale(0);
                 mMediaPlayer.setAspectRatio("fill");
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_16_9:
                 mMediaPlayer.setAspectRatio("16:9");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_16_10:
                 mMediaPlayer.setAspectRatio("16:10");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_2_1:
                 mMediaPlayer.setAspectRatio("2:1");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_221_1:
                 mMediaPlayer.setAspectRatio("221:100");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_235_1:
                 mMediaPlayer.setAspectRatio("235:100");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_239_1:
                 mMediaPlayer.setAspectRatio("239:100");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_5_4:
                 mMediaPlayer.setAspectRatio("5:4");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_4_3:
                 mMediaPlayer.setAspectRatio("4:3");
                 mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.Smaller);
                 break;
             case SURFACE_ORIGINAL:
                 mMediaPlayer.setAspectRatio(null);
                 mMediaPlayer.setNativeScale(1);
+                mMediaPlayer.setDisplayFit(MediaPlayer.FitMode.None);
                 break;
         }
     }
@@ -249,7 +237,7 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
 
         ViewGroup.LayoutParams lp = videoView.getLayoutParams();
         if (mVideoWidth * mVideoHeight == 0 || (AndroidUtil.isNougatOrLater && activity != null && activity.isInPictureInPictureMode())) {
-            changeMediaPlayerLayout(sw, sh);
+            changeMediaPlayerLayout();
             /* Case of OpenGL vouts: handles the placement of the video using MediaPlayer API */
             lp.width  = ViewGroup.LayoutParams.MATCH_PARENT;
             lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
