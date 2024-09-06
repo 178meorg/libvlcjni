@@ -176,6 +176,14 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         public static final int Right = 4;
     }
 
+    public static class FitMode {
+        public static final int None = 0;    // zoom set with scale
+        public static final int Smaller = 1; // Fit inside / to smallest display dimension
+        public static final int Larger = 2;  // Fit outside / to largest display dimension
+        public static final int Width = 3;   // Fit to display width
+        public static final int Height = 4;  // Fit to display height
+    }
+
     public static class Title {
         private static class Flags {
             public static final int MENU = 0x01;
@@ -867,6 +875,25 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         nativeSetAspectRatio(aspect);
     }
 
+    /**
+     * Get current video fit mode
+     *
+     * @return the video fit mode
+     */
+    public int getDisplayFit() {
+        return nativeGetDisplayFit();
+    }
+
+    /**
+     * Set new video fit mode.
+     *
+     * @param fit new display fit see {@link FitMode}
+     */
+    public void setDisplayFit(int fit) {
+        if (nativeGetDisplayFit() != fit)
+            nativeSetDisplayFit(fit);
+    }
+
     private boolean isAudioDigitalOutputCapable() {
         return mAudioOutput == null || mAudioOutput.contains("audiotrack");
     }
@@ -1456,6 +1483,8 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     private native void nativeSetScale(float scale);
     private native String nativeGetAspectRatio();
     private native void nativeSetAspectRatio(String aspect);
+    private native int nativeGetDisplayFit();
+    private native void nativeSetDisplayFit(int fit);
     private native boolean nativeUpdateViewpoint(float yaw, float pitch, float roll, float fov, boolean absolute);
     private native boolean nativeSetAudioOutput(String aout);
     private native boolean nativeSetAudioOutputDevice(String id);

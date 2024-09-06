@@ -958,6 +958,32 @@ Java_org_videolan_libvlc_MediaPlayer_nativeSetAspectRatio(JNIEnv *env,
     (*env)->ReleaseStringUTFChars(env, jaspect, psz_aspect);
 }
 
+jint
+Java_org_videolan_libvlc_MediaPlayer_nativeGetDisplayFit(JNIEnv *env,
+                                                         jobject thiz)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return libvlc_video_fit_smaller; // default mode
+    _Static_assert(libvlc_video_fit_height == 4, "Fit mode mismatch");
+
+    return libvlc_video_get_display_fit(p_obj->u.p_mp);
+}
+
+void
+Java_org_videolan_libvlc_MediaPlayer_nativeSetDisplayFit(JNIEnv *env,
+                                                         jobject thiz,
+                                                         jint fit)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return;
+
+    libvlc_video_set_display_fit(p_obj->u.p_mp, fit);
+}
+
 jboolean
 Java_org_videolan_libvlc_MediaPlayer_nativeUpdateViewpoint(JNIEnv *env,
                                                            jobject thiz,
