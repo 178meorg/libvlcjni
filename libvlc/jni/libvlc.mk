@@ -31,8 +31,8 @@ LOCAL_LDLIBS := \
     $(VLC_BUILD_DIR)/src/.libs/libvlccore.a \
     $(VLC_BUILD_DIR)/compat/.libs/libcompat.a \
     $(VLC_CONTRIB_LDFLAGS) \
-    -ldl -lz -lm -llog \
-    -ljpeg \
+    -ldl -lm -llog \
+    \
     -Wl,-Bsymbolic
 LOCAL_CXXFLAGS := -std=c++17
 LOCAL_LDFLAGS += "-Wl,-z,max-page-size=16384"
