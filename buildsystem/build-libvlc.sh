@@ -693,13 +693,6 @@ rm ${REDEFINED_VLC_MODULES_DIR}/syms
 VLC_MODULES=$(avlc_find_modules ${REDEFINED_VLC_MODULES_DIR})
 VLC_CONTRIB_LDFLAGS=$(for i in $(/bin/ls $VLC_CONTRIB/lib/pkgconfig/*.pc); do avlc_pkgconfig --libs $i; done |xargs)
 
-# Lua contrib doesn't expose a pkg-config file with libvlc 3.x and is
-# not probed by the previous command in VLC_CONTRIB_LDFLAGS, so probe
-# whether it was detected or add it manually to the LDFLAGS.
-if ! avlc_pkgconfig --exists lua; then
-    VLC_CONTRIB_LDFLAGS="$VLC_CONTRIB_LDFLAGS '$VLC_CONTRIB/lib/liblua.a'"
-fi
-
 if [ "$AVLC_STATIC_CXX" = 1 ]; then
     VLC_APP_STL="c++_static"
 else
