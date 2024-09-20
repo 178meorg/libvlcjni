@@ -691,7 +691,7 @@ rm ${REDEFINED_VLC_MODULES_DIR}/syms
 ###########################
 
 VLC_MODULES=$(avlc_find_modules ${REDEFINED_VLC_MODULES_DIR})
-VLC_CONTRIB_LDFLAGS=$(for i in $(/bin/ls $VLC_CONTRIB/lib/pkgconfig/*.pc); do avlc_pkgconfig --libs $i; done |xargs)
+VLC_CONTRIB_LDFLAGS=$(cd $VLC_CONTRIB/lib/pkgconfig; avlc_pkgconfig --libs $(ls *.pc  | sed -e 's/\.pc$//' | xargs))
 
 if [ "$AVLC_STATIC_CXX" = 1 ]; then
     VLC_APP_STL="c++_static"
