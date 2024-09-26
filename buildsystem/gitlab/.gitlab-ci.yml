@@ -21,7 +21,7 @@ stages:
     script: |
         rm -rf vlc
         ./buildsystem/get-vlc.sh
-        if [ ! buildsystem/get-contrib-rebuild.sh "${CI_DEFAULT_BRANCH}" ]; then
+        if ./buildsystem/get-contrib-rebuild.sh "origin/${CI_DEFAULT_BRANCH}"; then
           export VLC_CONTRIB_SHA="$(cd vlc && extras/ci/get-contrib-sha.sh android-${ARCH})"
           export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc/android-${ARCH}/vlc-contrib-${TRIPLET}-${VLC_CONTRIB_SHA}.tar.bz2"
           if vlc/extras/ci/check-url.sh "$VLC_PREBUILT_CONTRIBS_URL"; then CONTRIB_FLAGS="--with-prebuilt-contribs"; fi
