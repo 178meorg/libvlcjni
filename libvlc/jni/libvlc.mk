@@ -34,6 +34,7 @@ LOCAL_LDLIBS := \
     -ljpeg \
     -Wl,-Bsymbolic
 LOCAL_CXXFLAGS := -std=c++17
+LOCAL_LDFLAGS += "-Wl,-z,max-page-size=16384"
 # This duplicates the libvlc* link flags, but it propagates the dependency
 # on the native build which is what we want overall
 LOCAL_STATIC_LIBRARIES := libvlccore libvlccompat libvlc-native

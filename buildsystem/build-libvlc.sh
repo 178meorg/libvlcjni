@@ -167,8 +167,9 @@ fi
 
 # cf. GLOBAL_CFLAGS from ${ANDROID_NDK}/build/core/default-build-commands.mk
 VLC_CFLAGS="${VLC_CFLAGS} -fPIC -fdata-sections -ffunction-sections -funwind-tables \
- -fstack-protector-strong -no-canonical-prefixes"
-VLC_CXXFLAGS="-fexceptions -frtti"
+ -fstack-protector-strong -no-canonical-prefixes --start-no-unused-arguments -Wl,-z,max-page-size=16384 --end-no-unused-arguments"
+VLC_CXXFLAGS="-fexceptions -frtti --start-no-unused-arguments -Wl,-z,max-page-size=16384 --end-no-unused-arguments"
+VLC_LDFLAGS="-z max-page-size=16384"
 
 # Release or not?
 if [ "$AVLC_RELEASE" = 1 ]; then
@@ -187,6 +188,7 @@ echo "API:        $ANDROID_API"
 echo "PATH:       $PATH"
 echo "VLC_CFLAGS:        ${VLC_CFLAGS}"
 echo "VLC_CXXFLAGS:      ${VLC_CXXFLAGS}"
+echo "VLC_LDFLAGS:       ${VLC_LDFLAGS}"
 
 if [ -z "$ANDROID_NDK" ]; then
     echo "Please set the ANDROID_NDK environment variable with its path."
@@ -497,6 +499,7 @@ else
 
     echo "EXTRA_CFLAGS=${VLC_CFLAGS}" >> $VLC_CONTRIB_DIR/config.mak
     echo "EXTRA_CXXFLAGS=${VLC_CXXFLAGS}" >> $VLC_CONTRIB_DIR/config.mak
+    echo "EXTRA_LDFLAGS=${VLC_LDFLAGS}" >> $VLC_CONTRIB_DIR/config.mak
     echo "CC=${CROSS_CLANG}" >> $VLC_CONTRIB_DIR/config.mak
     echo "CXX=${CROSS_CLANG}++" >> $VLC_CONTRIB_DIR/config.mak
     echo "AR=${CROSS_TOOLS}ar" >> $VLC_CONTRIB_DIR/config.mak
