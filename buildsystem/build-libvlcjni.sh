@@ -91,13 +91,6 @@ fi
 
 VLC_BUILD_DIR="$(cd $VLC_SRC_DIR/; pwd)/build-android-${TARGET_TUPLE}"
 
-if [ -z $VLC_TARBALLS ]; then
-    VLC_TARBALLS="$(cd $VLC_SRC_DIR/;pwd)/contrib/tarballs"
-fi
-if [ ! -d $VLC_TARBALLS ]; then
-    mkdir -p $VLC_TARBALLS
-fi
-
 VLC_OUT_PATH="$VLC_BUILD_DIR/ndk"
 mkdir -p $VLC_OUT_PATH
 
