@@ -14,7 +14,7 @@ LOCAL_SRC_FILES += libvlcjni-vlcobject.c
 LOCAL_SRC_FILES += libvlcjni-media.c libvlcjni-medialist.c libvlcjni-mediadiscoverer.c libvlcjni-rendererdiscoverer.c
 LOCAL_SRC_FILES += libvlcjni-dialog.c
 LOCAL_SRC_FILES += std_logger.c
-LOCAL_C_INCLUDES := $(VLC_SRC_DIR)/include $(VLC_BUILD_DIR)/include
+LOCAL_C_INCLUDES := $(VLC_SRC_DIR)/include
 LOCAL_CFLAGS := -std=c17
 LOCAL_LDLIBS := -llog
 LOCAL_LDFLAGS += "-Wl,-z,max-page-size=16384"

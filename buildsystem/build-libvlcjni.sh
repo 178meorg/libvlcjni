@@ -168,7 +168,6 @@ avlc_build()
 $NDK_BUILD -C $LIBVLCJNI_ROOT/libvlc \
     APP_STL="$VLC_APP_STL" \
     VLC_SRC_DIR="$VLC_SRC_DIR" \
-    VLC_BUILD_DIR="$VLC_BUILD_DIR" \
     APP_BUILD_SCRIPT=jni/libvlcjni.mk \
     APP_PLATFORM=android-${ANDROID_API} \
     APP_ABI=${ANDROID_ABI} \
