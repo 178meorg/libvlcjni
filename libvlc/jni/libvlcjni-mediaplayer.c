@@ -22,7 +22,6 @@
 
 #include <pthread.h>
 #include <stdlib.h>
-#include <dlfcn.h>
 
 #include "libvlcjni-vlcobject.h"
 
@@ -1041,12 +1040,6 @@ Java_org_videolan_libvlc_MediaPlayer_nativeRecord(JNIEnv *env, jobject thiz,
     if (!p_obj)
         return false;
 
-    int (*record_func)(libvlc_media_player_t *, bool, const char *) =
-        dlsym(RTLD_DEFAULT, "libvlc_media_player_record");
-
-    if (!record_func)
-        return false;
-
     if (jdirectory)
     {
         psz_directory = (*env)->GetStringUTFChars(env, jdirectory, 0);
@@ -1059,14 +1052,14 @@ Java_org_videolan_libvlc_MediaPlayer_nativeRecord(JNIEnv *env, jobject thiz,
     else
         psz_directory = NULL;
 
-    jboolean ret = record_func(p_obj->u.p_mp, enable, psz_directory) == 0;
+    libvlc_media_player_record(p_obj->u.p_mp, enable, psz_directory);
 
     if (psz_directory)
     {
         (*env)->ReleaseStringUTFChars(env, jdirectory, psz_directory);
     }
 
-    return ret;
+    return true;
 }
 
 jint
