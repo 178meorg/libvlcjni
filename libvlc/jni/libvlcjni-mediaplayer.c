@@ -1033,7 +1033,7 @@ Java_org_videolan_libvlc_MediaPlayer_nativeSetEqualizer(JNIEnv *env,
 
 jboolean
 Java_org_videolan_libvlc_MediaPlayer_nativeRecord(JNIEnv *env, jobject thiz,
-                                                  jstring jdirectory)
+                                                  jstring jdirectory, jboolean enable)
 {
     vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
     const char *psz_directory;
@@ -1041,7 +1041,7 @@ Java_org_videolan_libvlc_MediaPlayer_nativeRecord(JNIEnv *env, jobject thiz,
     if (!p_obj)
         return false;
 
-    int (*record_func)(libvlc_media_player_t *, const char *) =
+    int (*record_func)(libvlc_media_player_t *, bool, const char *) =
         dlsym(RTLD_DEFAULT, "libvlc_media_player_record");
 
     if (!record_func)
@@ -1059,7 +1059,7 @@ Java_org_videolan_libvlc_MediaPlayer_nativeRecord(JNIEnv *env, jobject thiz,
     else
         psz_directory = NULL;
 
-    jboolean ret = record_func(p_obj->u.p_mp, psz_directory) == 0;
+    jboolean ret = record_func(p_obj->u.p_mp, enable, psz_directory) == 0;
 
     if (psz_directory)
     {

@@ -1222,10 +1222,11 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
      *
      * @param directory path of the recording directory or null to stop
      * recording
+     * @param enable true to start recording, false to stop
      * @return true on success.
      */
-    public boolean record(String directory) {
-        return nativeRecord(directory);
+    public boolean record(String directory, boolean enable) {
+        return nativeRecord(directory, enable);
     }
 
     /**
@@ -1469,7 +1470,7 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     private native long nativeGetSpuDelay();
     private native boolean nativeSetSpuDelay(long delay);
     private native boolean nativeAddSlave(int type, String location, boolean select);
-    private native boolean nativeRecord(String directory);
+    private native boolean nativeRecord(String directory, boolean enable);
     private native boolean nativeSetEqualizer(Equalizer equalizer);
     private native int nativeGetTeletext();
     private native void nativeSetTeletext(int page);
