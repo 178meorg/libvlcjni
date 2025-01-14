@@ -15,12 +15,18 @@ AVLC_MAKE_PREBUILT_CONTRIBS=0
 AVLC_USE_PREBUILT_CONTRIBS=0
 # JNI build can be disabled for testing/CI purpose
 AVLC_BUILD_JNI=1
+# Indicates the license of contribs
+AVLC_CONTRIB_LICENSE=g
 while [ $# -gt 0 ]; do
     case $1 in
         help|--help)
             echo "Use -a to set the ARCH"
             echo "Use --release to build in release mode"
-            echo "Use --static-cpp use static C++ runtime"
+            echo "Use --static-cpp to use the static C++ runtime"
+            echo "Use --license <l> to build contribs with license l"
+            echo "   g: GPLv3 (default)"
+            echo "   l: LGPLv3 + ad-clauses"
+            echo "   a: LGPLv2 + ad-clauses"
             exit 1
             ;;
         a|-a)
@@ -30,6 +36,10 @@ while [ $# -gt 0 ]; do
         release|--release)
             AVLC_RELEASE=1
             LIBVLC_RELEASE="--release"
+            ;;
+        --license)
+            AVLC_CONTRIB_LICENSE=$2
+            shift
             ;;
         --package-contribs)
             AVLC_MAKE_PREBUILT_CONTRIBS=1
@@ -266,7 +276,7 @@ avlc_pkgconfig()
 
 avlc_build()
 {
-$LIBVLCJNI_SRC_DIR/buildsystem/build-libvlc.sh -a $ANDROID_ABI $LIBVLC_RELEASE $LIBVLC_RUNTIME $LIBVLC_PACKAGE_CONTRIBS $LIBVLC_PREBUILT_CONTRIBS
+$LIBVLCJNI_SRC_DIR/buildsystem/build-libvlc.sh -a $ANDROID_ABI $LIBVLC_RELEASE $LIBVLC_RUNTIME $LIBVLC_PACKAGE_CONTRIBS $LIBVLC_PREBUILT_CONTRIBS --license $AVLC_CONTRIB_LICENSE
 
 if [ "$AVLC_BUILD_JNI" = "1" ]; then
     $LIBVLCJNI_SRC_DIR/buildsystem/build-libvlcjni.sh -a $ANDROID_ABI $LIBVLC_RELEASE $LIBVLC_RUNTIME

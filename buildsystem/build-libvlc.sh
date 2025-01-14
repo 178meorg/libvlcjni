@@ -13,12 +13,18 @@ AVLC_MAKE_PREBUILT_CONTRIBS=0
 # Indicates that prebuit contribs should be
 # used instead of building the contribs from source
 AVLC_USE_PREBUILT_CONTRIBS=0
+# Indicates the license of contribs
+AVLC_CONTRIB_LICENSE=g
 while [ $# -gt 0 ]; do
     case $1 in
         help|--help)
             echo "Use -a to set the ARCH"
             echo "Use --release to build in release mode"
-            echo "Use --static-cpp use static C++ runtime"
+            echo "Use --static-cpp to use the static C++ runtime"
+            echo "Use --license <l> to build contribs with license l"
+            echo "   g: GPLv3 (default)"
+            echo "   l: LGPLv3 + ad-clauses"
+            echo "   a: LGPLv2 + ad-clauses"
             exit 1
             ;;
         a|-a)
@@ -27,6 +33,10 @@ while [ $# -gt 0 ]; do
             ;;
         release|--release)
             AVLC_RELEASE=1
+            ;;
+        --license)
+            AVLC_CONTRIB_LICENSE=$2
+            shift
             ;;
         --package-contribs)
             AVLC_MAKE_PREBUILT_CONTRIBS=1
@@ -285,7 +295,6 @@ VLC_CONTRIB_ARGS="\
     --disable-x265 \
     --enable-ad-clauses \
     --enable-dvdnav \
-    --enable-dvdread \
     --enable-fluidlite \
     --enable-gme \
     --enable-harfbuzz \
@@ -348,14 +357,12 @@ VLC_CONFIGURE_ARGS="\
     --enable-chromecast \
     --enable-dvbpsi \
     --enable-dvdnav \
-    --enable-dvdread \
     --enable-fluidlite \
     --enable-gles2 \
     --enable-gme \
     --enable-jpeg \
     --enable-libass \
     --enable-libxml2 \
-    --enable-live555 \
     --enable-lua \
     --enable-matroska \
     --enable-mod \
@@ -477,6 +484,23 @@ if [ ! $? -eq 0 ];then
 else
     VLC_CONTRIB_ARGS="$VLC_CONTRIB_ARGS --disable-gettext"
 fi
+
+case $AVLC_CONTRIB_LICENSE in
+    l)
+        # LGPL v3 + ad-clauses
+        VLC_CONTRIB_ARGS="$VLC_CONTRIB_ARGS --disable-gpl --enable-ad-clauses"
+        VLC_CONFIGURE_ARGS="$VLC_CONFIGURE_ARGS --enable-live555"
+    ;;
+    a)
+        # LGPL v2.1 + ad-clauses
+        VLC_CONTRIB_ARGS="$VLC_CONTRIB_ARGS --disable-gpl --disable-gnuv3 --enable-ad-clauses"
+    ;;
+    g|*)
+        # GPL v3
+        VLC_CONFIGURE_ARGS="$VLC_CONFIGURE_ARGS --enable-live555 --enable-dvdread"
+    ;;
+esac
+
 
 (cd $VLC_CONTRIB_DIR && ANDROID_ABI=${ANDROID_ABI} ANDROID_API=${ANDROID_API} \
     ../bootstrap --host=${TARGET_TUPLE} ${VLC_CONTRIB_ARGS})
