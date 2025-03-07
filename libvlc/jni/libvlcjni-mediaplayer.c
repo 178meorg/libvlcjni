@@ -1236,5 +1236,5 @@ Java_org_videolan_libvlc_MediaPlayer_nativeGetTeletextTransparency(JNIEnv *env,
     if (!p_obj)
         return false;
 
-    libvlc_video_get_teletext_transparency (p_obj->u.p_mp);
+    return !!libvlc_video_get_teletext_transparency (p_obj->u.p_mp);
 }
