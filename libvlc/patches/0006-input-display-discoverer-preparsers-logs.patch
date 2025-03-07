@@ -14,14 +14,14 @@ diff --git a/src/input/input.c b/src/input/input.c
 index 21e019a6e72..d12de7bf367 100644
 --- a/src/input/input.c
 +++ b/src/input/input.c
-@@ -297,7 +297,6 @@ input_thread_t *input_Create( vlc_object_t *p_parent,
-     if( priv->type == INPUT_TYPE_PREPARSING
-      || priv->type == INPUT_TYPE_THUMBNAILING )
+@@ -301,7 +301,6 @@ input_thread_t * input_Create( vlc_object_t *p_parent, input_item_t *p_item,
+ 
+     if( priv->type != INPUT_TYPE_PLAYBACK )
      {
 -        p_input->obj.logger = NULL;
          p_input->obj.no_interact = true;
      }
-     else
+ 
 -- 
 2.35.1
 
