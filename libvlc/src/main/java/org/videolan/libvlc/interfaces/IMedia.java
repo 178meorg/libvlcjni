@@ -102,9 +102,10 @@ public interface IMedia extends IVLCObject<IMedia.Event> {
     class Parse {
         public static final int ParseLocal = 0x01;
         public static final int ParseNetwork = 0x02;
-        public static final int FetchLocal = 0x04;
-        public static final int FetchNetwork = 0x08;
-        public static final int DoInteract = 0x10;
+        public static final int ParseForced = 0x04;
+        public static final int FetchLocal = 0x08;
+        public static final int FetchNetwork = 0x10;
+        public static final int DoInteract = 0x20;
     }
 
     /*
