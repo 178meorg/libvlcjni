@@ -390,6 +390,7 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         SURFACE_16_9(16F/9F),
         SURFACE_4_3(4F/3F),
         SURFACE_16_10(16F/10F),
+        SURFACE_2_1(2F),
         SURFACE_221_1(2.21F),
         SURFACE_235_1(2.35F),
         SURFACE_239_1(2.39F),
