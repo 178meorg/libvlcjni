@@ -43,15 +43,34 @@ check_patch_is_applied()
     fi
 }
 
+VLC_TESTED_HASH=113e5a86b8801cb5cde1616d4f4da2eb14cbc1a8
+VLC_REPOSITORY=https://code.videolan.org/videolan/vlc.git
+VLC_BRANCH=master
+
 RESET=0
 while [ $# -gt 0 ]; do
     case $1 in
         help|--help|-h)
             echo "Use -b to bypass libvlc source checks (vlc custom sources)"
+            echo "  --vlcgit <vlc_git_url> (default $VLC_TESTED_HASH)"
+            echo "  --vlchash <vlc_git_hash> (default $VLC_REPOSITORY)"
+            echo "  --vlcbranch <branch_name> (default $VLC_BRANCH)"
             exit 0
             ;;
         --reset)
             RESET=1
+            ;;
+        --vlcgit)
+            VLC_REPOSITORY=$2
+            shift
+            ;;
+        --vlchash)
+            VLC_TESTED_HASH=$2
+            shift
+            ;;
+        --vlcbranch)
+            VLC_BRANCH=$2
+            shift
             ;;
         -b)
             BYPASS_VLC_SRC_CHECKS=1
@@ -69,9 +88,6 @@ done
 # Fetch VLC source #
 ####################
 
-VLC_TESTED_HASH=113e5a86b8801cb5cde1616d4f4da2eb14cbc1a8
-VLC_REPOSITORY=https://code.videolan.org/videolan/vlc.git
-VLC_BRANCH=master
 if [ ! -d "vlc" ]; then
     diagnostic "VLC sources: not found, cloning"
     git clone "${VLC_REPOSITORY}" vlc -b ${VLC_BRANCH} --single-branch || fail "VLC sources: git clone failed"
