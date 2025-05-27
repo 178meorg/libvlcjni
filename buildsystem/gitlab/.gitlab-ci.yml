@@ -7,7 +7,7 @@ cache:
 
 default:
   interruptible: true
-  image: registry.videolan.org/vlc-debian-android:20250403202200
+  image: registry.videolan.org/vlc-debian-android:20250626142950
   tags:
     - amd64
     - docker
