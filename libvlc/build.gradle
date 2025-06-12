@@ -2,7 +2,6 @@ apply plugin: 'com.android.library'
 apply plugin: "com.vanniktech.maven.publish"
 
 def abi = System.getenv('GRADLE_ABI')?.toLowerCase()
-def vlcSrcDirs = System.getenv('GRADLE_VLC_SRC_DIRS')
 ext {
     library_version = "$rootProject.ext.libvlcVersion"
 }
@@ -38,11 +37,9 @@ android {
     sourceSets {
         main {
             jniLibs.srcDirs = [ 'jni/libs' ]
-            jniLibs.srcDirs += "$vlcSrcDirs"
         }
         androidTest {
             jniLibs.srcDirs = [ 'jni/libs' ]
-            jniLibs.srcDirs += "$vlcSrcDirs"
         }
     }
 
