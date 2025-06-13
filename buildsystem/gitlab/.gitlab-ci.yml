@@ -84,11 +84,3 @@ build-libvlc-x86_64-static:
         ARCH: x86_64
         TRIPLET: x86_64-linux-android
         CONFIG_ARGS: --static-cpp
-
-#
-.build-release-libs-base:
-    rules:
-      - if: '$CI_COMMIT_TAG =~ /^libvlc-.*$/'
-    variables:
-      M2_REPO: "$CI_PROJECT_DIR/aars/repository"
-
