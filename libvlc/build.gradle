@@ -56,7 +56,6 @@ android {
     }
 
     task hrtfsCopy(type: Copy) {
-        project.logger.lifecycle('hrtfsCopy')
         from '../vlc/share/hrtfs'
         into 'assets/hrtfs'
     }
