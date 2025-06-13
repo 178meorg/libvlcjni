@@ -25,6 +25,10 @@ stages:
         export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc/android-${ARCH}/vlc-contrib-${TRIPLET}-${VLC_CONTRIB_SHA}.tar.bz2"
         if vlc/extras/ci/check-url.sh "$VLC_PREBUILT_CONTRIBS_URL"; then CONTRIB_FLAGS="--with-prebuilt-contribs"; fi
         ./buildsystem/compile-libvlc.sh -a ${ARCH} $CONTRIB_FLAGS $CONFIG_ARGS
+
+        echo "sdk.dir=$ANDROID_SDK" > local.properties
+        gradle assembleDebug
+
     rules:
         # Explicitely refuse to build anything that would also trigger
         # a medialib build
