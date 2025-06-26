@@ -24,7 +24,7 @@ stages:
         export VLC_CONTRIB_SHA="$(cd vlc && extras/ci/get-contrib-sha.sh android-${ARCH})"
         export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc/android-${ARCH}/vlc-contrib-${TRIPLET}-${VLC_CONTRIB_SHA}.tar.bz2"
         if vlc/extras/ci/check-url.sh "$VLC_PREBUILT_CONTRIBS_URL"; then CONTRIB_FLAGS="--with-prebuilt-contribs"; fi
-        ./buildsystem/compile-libvlc.sh -a ${ARCH} $CONTRIB_FLAGS
+        ./buildsystem/compile-libvlc.sh -a ${ARCH} $CONTRIB_FLAGS $CONFIG_ARGS
     rules:
         # Explicitely refuse to build anything that would also trigger
         # a medialib build
@@ -64,6 +64,20 @@ build-libvlc-x86_64:
     variables:
         ARCH: x86_64
         TRIPLET: x86_64-linux-android
+
+build-libvlc-arm64-static:
+    extends: .build-libvlc-base
+    variables:
+        ARCH: arm64
+        TRIPLET: aarch64-linux-android
+        CONFIG_ARGS: --static-cpp
+
+build-libvlc-x86_64-static:
+    extends: .build-libvlc-base
+    variables:
+        ARCH: arm64
+        TRIPLET: x86_64-linux-android
+        CONFIG_ARGS: --static-cpp
 
 #
 .build-release-libs-base:
