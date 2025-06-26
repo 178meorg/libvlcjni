@@ -164,7 +164,6 @@ avlc_build()
 
 $NDK_BUILD -C $LIBVLCJNI_ROOT/libvlc \
     APP_STL="c++_shared" \
-    APP_CPPFLAGS="-frtti -fexceptions" \
     VLC_SRC_DIR="$VLC_SRC_DIR" \
     VLC_BUILD_DIR="$VLC_BUILD_DIR" \
     APP_BUILD_SCRIPT=jni/libvlcjni.mk \
