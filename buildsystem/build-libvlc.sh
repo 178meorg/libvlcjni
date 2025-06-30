@@ -526,6 +526,12 @@ else
     fi
 fi
 
+# disable forced -lc++ in contribs
+PC_FILES=$(find ${VLC_CONTRIB_OUT_DIR}/lib/pkgconfig -type f -name '*.pc')
+for pcfile in ${PC_FILES}; do
+    sed -i 's/ -lc++//' $pcfile
+done
+
 mkdir -p $VLC_BUILD_DIR
 
 #############
