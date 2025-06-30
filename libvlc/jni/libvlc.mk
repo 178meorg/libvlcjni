@@ -23,6 +23,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE    := libvlc
 LOCAL_SRC_FILES := $(VLC_BUILD_DIR)/ndk/libvlcjni-modules.c \
 				   $(VLC_BUILD_DIR)/ndk/libvlcjni-symbols.c
+LOCAL_HAS_CPP := true
 LOCAL_LDFLAGS := -L$(VLC_CONTRIB)/lib
 LOCAL_LDLIBS := \
     $(VLC_MODULES) \
