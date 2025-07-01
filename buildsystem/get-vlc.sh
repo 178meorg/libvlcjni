@@ -43,7 +43,7 @@ check_patch_is_applied()
     fi
 }
 
-VLC_TESTED_HASH=113e5a86b8801cb5cde1616d4f4da2eb14cbc1a8
+VLC_TESTED_HASH=3d15e89c5907b8b14ca0a5aad862a421e3f7994f
 VLC_REPOSITORY=https://code.videolan.org/videolan/vlc.git
 VLC_BRANCH=master
 
