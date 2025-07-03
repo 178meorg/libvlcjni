@@ -11,13 +11,17 @@ def libvlc_revision = providers.exec {
     commandLine('git', 'rev-parse', '--short', 'HEAD')
 }.standardOutput.asText.get().trim()
 
+def vlc_revision = providers.exec {
+    workingDir('vlc')
+    commandLine('git', 'rev-parse', '--short', 'HEAD')
+}.standardOutput.asText.get().trim()
 
 android {
     namespace = 'org.videolan'
 
     defaultConfig {
         resValue "string", "build_libvlc_revision", libvlc_revision
-        resValue "string", "build_vlc_revision", vlcRevision()
+        resValue "string", "build_vlc_revision", vlc_revision
         tasks.whenTaskAdded { task ->
             if (task.name.startsWith('merge')) {
                 task.dependsOn hrtfsCopy
@@ -99,16 +103,6 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-}
-
-def vlcRevision() {
-    def vlc = new ByteArrayOutputStream()
-    exec {
-        commandLine 'git', 'rev-parse', '--short', 'HEAD'
-        workingDir '../vlc'
-        standardOutput = vlc
-    }
-    return vlc.toString()
 }
 
 apply from: "../publish.gradle"
