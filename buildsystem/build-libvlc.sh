@@ -18,6 +18,7 @@ while [ $# -gt 0 ]; do
         help|--help)
             echo "Use -a to set the ARCH"
             echo "Use --release to build in release mode"
+            echo "Use --static-cpp use static C++ runtime"
             exit 1
             ;;
         a|-a)
@@ -32,6 +33,9 @@ while [ $# -gt 0 ]; do
             ;;
         --with-prebuilt-contribs)
             AVLC_USE_PREBUILT_CONTRIBS=1
+            ;;
+        --static-cpp)
+            AVLC_STATIC_CXX=1
             ;;
     esac
     shift
@@ -696,10 +700,16 @@ if ! avlc_pkgconfig --exists lua; then
     VLC_CONTRIB_LDFLAGS="$VLC_CONTRIB_LDFLAGS '$VLC_CONTRIB/lib/liblua.a'"
 fi
 
+if [ "$AVLC_STATIC_CXX" = 1 ]; then
+    VLC_APP_STL="c++_static"
+else
+    VLC_APP_STL="c++_shared"
+fi
+
 echo -e "ndk-build vlc"
 
 $NDK_BUILD -C $LIBVLCJNI_ROOT/libvlc \
-    APP_STL="c++_shared" \
+    APP_STL="$VLC_APP_STL" \
     APP_CPPFLAGS="-frtti -fexceptions" \
     VLC_SRC_DIR="$VLC_SRC_DIR" \
     VLC_BUILD_DIR="$VLC_BUILD_DIR" \

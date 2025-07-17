@@ -12,6 +12,7 @@ while [ $# -gt 0 ]; do
         help|--help)
             echo "Use -a to set the ARCH"
             echo "Use --release to build in release mode"
+            echo "Use --static-cpp use static C++ runtime"
             exit 1
             ;;
         a|-a)
@@ -20,6 +21,9 @@ while [ $# -gt 0 ]; do
             ;;
         release|--release)
             AVLC_RELEASE=1
+            ;;
+        --static-cpp)
+            AVLC_STATIC_CXX=1
             ;;
     esac
     shift
@@ -151,6 +155,12 @@ if [ -z "$ANDROID_ABI" ]; then
     exit 1
 fi
 
+if [ "$AVLC_STATIC_CXX" = 1 ]; then
+    VLC_APP_STL="c++_static"
+else
+    VLC_APP_STL="c++_shared"
+fi
+
 avlc_checkfail()
 {
     if [ ! $? -eq 0 ];then
@@ -163,7 +173,7 @@ avlc_build()
 {
 
 $NDK_BUILD -C $LIBVLCJNI_ROOT/libvlc \
-    APP_STL="c++_shared" \
+    APP_STL="$VLC_APP_STL" \
     VLC_SRC_DIR="$VLC_SRC_DIR" \
     VLC_BUILD_DIR="$VLC_BUILD_DIR" \
     APP_BUILD_SCRIPT=jni/libvlcjni.mk \

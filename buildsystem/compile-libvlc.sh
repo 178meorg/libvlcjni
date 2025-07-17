@@ -20,6 +20,7 @@ while [ $# -gt 0 ]; do
         help|--help)
             echo "Use -a to set the ARCH"
             echo "Use --release to build in release mode"
+            echo "Use --static-cpp use static C++ runtime"
             exit 1
             ;;
         a|-a)
@@ -40,6 +41,9 @@ while [ $# -gt 0 ]; do
             ;;
         --no-jni)
             AVLC_BUILD_JNI=0
+            ;;
+        --static-cpp)
+            AVLC_STATIC_CXX=1
             ;;
     esac
     shift
@@ -181,6 +185,11 @@ VLC_CFLAGS="${VLC_CFLAGS} -fPIC -fdata-sections -ffunction-sections -funwind-tab
  -fstack-protector-strong -no-canonical-prefixes"
 VLC_CXXFLAGS="-fexceptions -frtti"
 
+if [ "$AVLC_STATIC_CXX" = 1 ]; then
+    VLC_CXXFLAGS="$VLC_CXXFLAGS --start-no-unused-arguments -static -static-libstdc++ --end-no-unused-arguments"
+    LIBVLC_RUNTIME="--static-cpp"
+fi
+
 # Release or not?
 if [ "$AVLC_RELEASE" = 1 ]; then
     VLC_CFLAGS="${VLC_CFLAGS} -DNDEBUG "
@@ -264,10 +273,10 @@ avlc_pkgconfig()
 
 avlc_build()
 {
-$LIBVLCJNI_SRC_DIR/buildsystem/build-libvlc.sh -a $ANDROID_ABI $LIBVLC_RELEASE $LIBVLC_PACKAGE_CONTRIBS $LIBVLC_PREBUILT_CONTRIBS
+$LIBVLCJNI_SRC_DIR/buildsystem/build-libvlc.sh -a $ANDROID_ABI $LIBVLC_RELEASE $LIBVLC_RUNTIME $LIBVLC_PACKAGE_CONTRIBS $LIBVLC_PREBUILT_CONTRIBS
 
 if [ "$AVLC_BUILD_JNI" = "1" ]; then
-    $LIBVLCJNI_SRC_DIR/buildsystem/build-libvlcjni.sh -a $ANDROID_ABI $LIBVLC_RELEASE
+    $LIBVLCJNI_SRC_DIR/buildsystem/build-libvlcjni.sh -a $ANDROID_ABI $LIBVLC_RELEASE $LIBVLC_RUNTIME
 fi
 
 } # avlc_build()

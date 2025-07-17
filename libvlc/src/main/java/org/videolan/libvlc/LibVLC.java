@@ -132,6 +132,13 @@ public class LibVLC extends VLCObject<ILibVLC.Event> implements ILibVLC {
 
         try {
             System.loadLibrary("c++_shared");
+        } catch (UnsatisfiedLinkError ule) {
+            Log.e(TAG, "Can't load c++_shared library");
+        } catch (SecurityException se) {
+            Log.e(TAG, "Encountered a security issue when loading c++_shared library");
+        }
+
+        try {
             System.loadLibrary("vlc");
             System.loadLibrary("vlcjni");
         } catch (UnsatisfiedLinkError ule) {
