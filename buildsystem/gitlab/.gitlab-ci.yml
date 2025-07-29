@@ -81,7 +81,7 @@ build-libvlc-arm64-static:
 build-libvlc-x86_64-static:
     extends: .build-libvlc-base
     variables:
-        ARCH: arm64
+        ARCH: x86_64
         TRIPLET: x86_64-linux-android
         CONFIG_ARGS: --static-cpp
 
