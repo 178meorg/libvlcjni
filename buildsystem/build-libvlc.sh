@@ -294,7 +294,6 @@ VLC_CONTRIB_ARGS="\
     --disable-vncclient \
     --disable-x265 \
     --enable-ad-clauses \
-    --enable-dvdnav \
     --enable-fluidlite \
     --enable-gme \
     --enable-harfbuzz \
@@ -356,7 +355,6 @@ VLC_CONFIGURE_ARGS="\
     --enable-bluray \
     --enable-chromecast \
     --enable-dvbpsi \
-    --enable-dvdnav \
     --enable-fluidlite \
     --enable-gles2 \
     --enable-gme \
