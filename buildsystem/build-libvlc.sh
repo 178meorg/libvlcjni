@@ -570,11 +570,6 @@ if [ ${ANDROID_API} -lt "26" ]; then
     export ac_cv_header_sys_shm_h=no
 fi
 
-# always use fixups for search.h and tdestroy
-export ac_cv_header_search_h=no
-export ac_cv_func_tdestroy=no
-export ac_cv_func_tfind=no
-
 if [ ! -e $VLC_BUILD_DIR/config.h -o "$AVLC_RELEASE" = 1 ]; then
     VLC_CONFIGURE_DEBUG=""
     if [ ! "$AVLC_RELEASE" = 1 ]; then
