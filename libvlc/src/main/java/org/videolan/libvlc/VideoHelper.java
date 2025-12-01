@@ -174,17 +174,10 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
                 mMediaPlayer.setAspectRatio(null);
                 break;
             }
-            case SURFACE_FILL: {
-                IMedia.VideoTrack vtrack = (IMedia.VideoTrack) mMediaPlayer.getSelectedTrack(Media.Track.Type.Video);
-                if (vtrack == null)
-                    return;
-                final boolean videoSwapped = vtrack.orientation == IMedia.VideoTrack.Orientation.LeftBottom
-                        || vtrack.orientation == IMedia.VideoTrack.Orientation.RightTop;
+            case SURFACE_FILL:
                 mMediaPlayer.setNativeScale(0);
-                mMediaPlayer.setAspectRatio(!videoSwapped ? ""+displayW+":"+displayH
-                        : ""+displayH+":"+displayW);
+                mMediaPlayer.setAspectRatio("fill");
                 break;
-            }
             case SURFACE_16_9:
                 mMediaPlayer.setAspectRatio("16:9");
                 mMediaPlayer.setNativeScale(0);
