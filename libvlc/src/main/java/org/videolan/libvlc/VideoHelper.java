@@ -376,13 +376,13 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
     void setVideoScale(MediaPlayer.ScaleType type) {
         mCurrentScaleType = type;
         mCurrentScaleCustom = false;
-        updateVideoSurfaces();
+        changeMediaPlayerLayout();
     }
 
     void setCustomScale(float scale) {
         mCustomScale = scale;
         mCurrentScaleCustom = true;
-        updateVideoSurfaces();
+        changeMediaPlayerLayout();
     }
 
     MediaPlayer.ScaleType getVideoScale() {
