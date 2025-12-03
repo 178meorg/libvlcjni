@@ -119,6 +119,7 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
         }
         mVideoSurfaceFrame.addOnLayoutChangeListener(mOnLayoutChangeListener);
         mMediaPlayer.setVideoTrackEnabled(true);
+        updateVideoDimensions();
     }
 
     void detachViews() {
