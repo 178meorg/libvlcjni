@@ -845,7 +845,8 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     }
 
     protected void setNativeScale(float scale) {
-        nativeSetScale(scale);
+        if (nativeGetScale() != scale)
+            nativeSetScale(scale);
     }
 
     /**
