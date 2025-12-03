@@ -667,7 +667,16 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
      * Update the video surfaces, either to switch from one to another or to resize it
      */
     public void updateVideoSurfaces() {
-        if (mVideoHelper != null) mVideoHelper.updateVideoSurfaces();
+        if (mVideoHelper != null) 
+            mVideoHelper.updateVideoSurfaces();
+    }
+
+    /**
+     * Update the video dimensions in VLC core
+     */
+    public void updateVideoDimensions() {
+        if (mVideoHelper != null) 
+            mVideoHelper.updateVideoDimensions();
     }
 
     /**

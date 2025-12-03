@@ -205,6 +205,33 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
         }
     }
 
+    void updateVideoDimensions() {
+        if (mMediaPlayer == null || mMediaPlayer.isReleased() || !mMediaPlayer.getVLCVout().areViewsAttached())
+            return;
+        final boolean isPrimary = mDisplayManager == null || mDisplayManager.isPrimary();
+        final Activity activity = !isPrimary ? null : AndroidUtil.resolveActivity(mVideoSurfaceFrame.getContext());
+
+        final int surfaceWidth;
+        final int surfaceHeight;
+
+        // get screen size
+        if (activity != null) {
+            surfaceWidth = mVideoSurfaceFrame.getWidth();
+            surfaceHeight = mVideoSurfaceFrame.getHeight();
+        } else if (mDisplayManager != null && mDisplayManager.getPresentation() != null && mDisplayManager.getPresentation().getWindow() != null) {
+            surfaceWidth = mDisplayManager.getPresentation().getWindow().getDecorView().getWidth();
+            surfaceHeight = mDisplayManager.getPresentation().getWindow().getDecorView().getHeight();
+        } else return;
+
+        // sanity check
+        if (surfaceWidth * surfaceHeight == 0) {
+            Log.e(TAG, "Invalid surface size");
+            return;
+        }
+
+        mMediaPlayer.getVLCVout().setWindowSize(surfaceWidth, surfaceHeight);
+    }
+
     void updateVideoSurfaces() {
         if (mMediaPlayer == null || mMediaPlayer.isReleased() || !mMediaPlayer.getVLCVout().areViewsAttached()) return;
         final boolean isPrimary = mDisplayManager == null || mDisplayManager.isPrimary();
