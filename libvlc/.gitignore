@@ -6,5 +6,6 @@ libs/
 obj/
 jni/libvlcjni-modules.c
 jni/libvlcjni-symbols.c
+jni/pkgconfig
 .settings
 
