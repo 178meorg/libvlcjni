@@ -31,10 +31,10 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
 
     private int mVideoHeight = 0;
     private int mVideoWidth = 0;
-    private int mVideoVisibleHeight = 0;
-    private int mVideoVisibleWidth = 0;
-    private int mVideoSarNum = 0;
-    private int mVideoSarDen = 0;
+    private int mPlaceWidth = 0;
+    private int mPlaceHeight = 0;
+    private int mPlaceX = 0;
+    private int mPlaceY = 0;
 
     private FrameLayout mVideoSurfaceFrame;
     private SurfaceView mVideoSurface = null;
@@ -238,33 +238,13 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
         final boolean isPrimary = mDisplayManager == null || mDisplayManager.isPrimary();
         final Activity activity = !isPrimary ? null : AndroidUtil.resolveActivity(mVideoSurfaceFrame.getContext());
 
-        int sw;
-        int sh;
-
-        // get screen size
-        if (activity != null) {
-            sw = mVideoSurfaceFrame.getWidth();
-            sh = mVideoSurfaceFrame.getHeight();
-        } else if (mDisplayManager != null && mDisplayManager.getPresentation() != null && mDisplayManager.getPresentation().getWindow() != null) {
-            sw = mDisplayManager.getPresentation().getWindow().getDecorView().getWidth();
-            sh = mDisplayManager.getPresentation().getWindow().getDecorView().getHeight();
-        } else return;
-
-        // sanity check
-        if (sw * sh == 0) {
-            Log.e(TAG, "Invalid surface size");
-            return;
-        }
-
-        mMediaPlayer.getVLCVout().setWindowSize(sw, sh);
-
         /* We will setup either the videoSurface or the videoTexture */
         View videoView = mVideoSurface;
         if (videoView == null)
             videoView = mVideoTexture;
 
         ViewGroup.LayoutParams lp = videoView.getLayoutParams();
-        if (mVideoWidth * mVideoHeight == 0 || (AndroidUtil.isNougatOrLater && activity != null && activity.isInPictureInPictureMode())) {
+        if (mPlaceWidth * mPlaceHeight == 0 || (AndroidUtil.isNougatOrLater && activity != null && activity.isInPictureInPictureMode())) {
             changeMediaPlayerLayout();
             /* Case of OpenGL vouts: handles the placement of the video using MediaPlayer API */
             lp.width  = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -277,98 +257,26 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
             return;
         }
 
-        if (lp.width == lp.height && lp.width == ViewGroup.LayoutParams.MATCH_PARENT) {
-            /* We handle the placement of the video using Android View LayoutParams */
-            mMediaPlayer.setAspectRatio(null);
-            mMediaPlayer.setNativeScale(0);
-        }
-
-        double dw = sw, dh = sh;
-        boolean consideredPortrait = mVideoSurfaceFrame.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
-        if (mMediaPlayer.useOrientationFromBounds()) consideredPortrait = sh > sw;
-        final boolean isPortrait = isPrimary && consideredPortrait;
-
-        if (sw > sh && isPortrait || sw < sh && !isPortrait) {
-            dw = sh;
-            dh = sw;
-        }
-
-        // compute the aspect ratio
-        double ar, vw;
-        if (mVideoSarDen == mVideoSarNum) {
-            /* No indication about the density, assuming 1:1 */
-            vw = mVideoVisibleWidth;
-            ar = (double)mVideoVisibleWidth / (double)mVideoVisibleHeight;
-        } else {
-            /* Use the specified aspect ratio */
-            vw = mVideoVisibleWidth * (double)mVideoSarNum / mVideoSarDen;
-            ar = vw / mVideoVisibleHeight;
-        }
-
-        // compute the display aspect ratio
-        double dar = dw / dh;
-
-        MediaPlayer.ScaleType scaleType = mCurrentScaleType;
-        if (mCurrentScaleCustom) {
-            dh *= mCustomScale;
-            dw *= mCustomScale;
-            scaleType = MediaPlayer.ScaleType.SURFACE_BEST_FIT;
-        }
-
-        switch (scaleType) {
-            case SURFACE_BEST_FIT:
-                if (dar < ar)
-                    dh = dw / ar;
-                else
-                    dw = dh * ar;
-                break;
-            case SURFACE_FIT_SCREEN:
-                if (dar >= ar)
-                    dh = dw / ar; /* horizontal */
-                else
-                    dw = dh * ar; /* vertical */
-                break;
-            case SURFACE_FILL:
-                break;
-            case SURFACE_ORIGINAL:
-                dh = mVideoVisibleHeight;
-                dw = vw;
-                break;
-            default:
-                ar = mCurrentScaleType.getRatio();
-                if (dar < ar)
-                    dh = dw / ar;
-                else
-                    dw = dh * ar;
-                break;
-        }
-
         // set display size
-        lp.width  = (int) Math.ceil(dw * mVideoWidth / mVideoVisibleWidth);
-        lp.height = (int) Math.ceil(dh * mVideoHeight / mVideoVisibleHeight);
+        lp.width  = mPlaceWidth;
+        lp.height = mPlaceHeight;
         videoView.setLayoutParams(lp);
 
         videoView.invalidate();
     }
 
     @Override
-    public void onNewVideoLayout(IVLCVout vlcVout, int width, int height, int visibleWidth, int visibleHeight, int sarNum, int sarDen) {
-        if (width == 0 && height == 0 && visibleWidth == 0 && visibleHeight == 0 && sarNum == 0 && sarDen == 0) {
-            mVideoWidth = mVideoHeight = mVideoVisibleWidth = mVideoVisibleHeight = 0;
-            mVideoSarNum = mVideoSarDen = 0;
+    public void onNewVideoLayout(IVLCVout vlcVout, int displayWidth, int displayHeight,
+                                 int placeWidth, int placeHeight, int placeX, int placeY) {
+        mPlaceWidth = placeWidth;
+        mPlaceHeight = placeHeight;
+        mPlaceX = placeX;
+        mPlaceY = placeY;
+        if (placeWidth == 0 || placeHeight == 0) {
+            mVideoWidth = mVideoHeight = 0;
         } else {
-            if (width != 0 && height != 0) {
-                mVideoWidth = width;
-                mVideoHeight = height;
-            }
-            if (visibleWidth != 0 && visibleHeight != 0) {
-                mVideoVisibleWidth = visibleWidth;
-                mVideoVisibleHeight = visibleHeight;
-            }
-            if (sarNum != 0 && sarDen != 0) {
-                mVideoSarNum = sarNum;
-                mVideoSarDen = sarDen;
-            }
+            mVideoWidth = displayWidth;
+            mVideoHeight = displayHeight;
         }
         updateVideoSurfaces();
     }

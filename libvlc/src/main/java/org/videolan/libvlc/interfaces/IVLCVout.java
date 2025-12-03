@@ -46,14 +46,14 @@ public interface IVLCVout {
          * @param vlcVout vlcVout
          * @param width Frame width
          * @param height Frame height
-         * @param visibleWidth Visible frame width
-         * @param visibleHeight Visible frame height
-         * @param sarNum Surface aspect ratio numerator
-         * @param sarDen Surface aspect ratio denominator
+         * @param placeWidth Width of the video in window
+         * @param placeHeight Height of the video in window
+         * @param placeX X Position of the video in window
+         * @param placeY Y Position of the video in window
          */
         @MainThread
         void onNewVideoLayout(IVLCVout vlcVout, int width, int height,
-                              int visibleWidth, int visibleHeight, int sarNum, int sarDen);
+                              int placeWidth, int placeHeight, int placeX, int placeY);
     }
 
     interface Callback {

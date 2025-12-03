@@ -553,23 +553,23 @@ public class AWindow implements IVLCVout {
      * This call will result of{@link IVLCVout.OnNewVideoLayoutListener#onNewVideoLayout(IVLCVout, int, int, int, int, int, int)}
      * being called from the main thread.
      *
-     * @param width Frame width
-     * @param height Frame height
-     * @param visibleWidth Visible frame width
-     * @param visibleHeight Visible frame height
-     * @param sarNum Surface aspect ratio numerator
-     * @param sarDen Surface aspect ratio denominator
+     * @param displayWidth Display width used to compute the position, 0 = video window closed
+     * @param displayHeight Display height used to compute the position, 0 = video window closed
+     * @param placeWidth Width of the video in window
+     * @param placeHeight Height of the video in window
+     * @param placeX X Position of the video in window
+     * @param placeY Y Position of the video in window
      */
     @SuppressWarnings("unused") /* used by JNI */
-    private void setVideoLayout(final int width, final int height, final int visibleWidth,
-                                final int visibleHeight, final int sarNum, final int sarDen) {
+    private void setVideoLayout(final int displayWidth, final int displayHeight,
+                                final int placeWidth, final int placeHeight, final int placeX, final int placeY) {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
                 /* No need to synchronize here, mOnNewVideoLayoutListener is only set from MainThread */
                 if (mOnNewVideoLayoutListener != null)
-                    mOnNewVideoLayoutListener.onNewVideoLayout(AWindow.this, width, height,
-                            visibleWidth, visibleHeight, sarNum, sarDen);
+                    mOnNewVideoLayoutListener.onNewVideoLayout(AWindow.this, displayWidth, displayHeight,
+                            placeWidth, placeHeight, placeX, placeY);
             }
         });
     }
