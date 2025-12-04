@@ -841,7 +841,7 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
      * @param scale the scaling factor, or zero
      */
     public void setScale(float scale) {
-        mVideoHelper.setCustomScale(scale);
+        if (mVideoHelper != null) mVideoHelper.setCustomScale(scale);
     }
 
     protected void setNativeScale(float scale) {
