@@ -359,6 +359,8 @@ public class AWindow implements IVLCVout {
         if (mSurfaceCallback != null)
             mSurfaceCallback.onSurfacesDestroyed(this);
         mSurfaceTextureThread.release();
+        mWindowWidth = -1;
+        mWindowHeight = -1;
     }
 
     @Override
@@ -526,6 +528,8 @@ public class AWindow implements IVLCVout {
             if (mCallbackNativeHandle == 0)
                 throw new IllegalArgumentException("unregister called when not registered");
             mCallbackNativeHandle = 0;
+            mWindowWidth = -1;
+            mWindowHeight = -1;
         }
     }
 
