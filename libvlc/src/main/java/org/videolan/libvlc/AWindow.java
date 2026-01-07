@@ -534,21 +534,6 @@ public class AWindow implements IVLCVout {
     }
 
     /**
-     * This method is only used for HoneyComb and before since ANativeWindow_setBuffersGeometry doesn't work before.
-     * It is synchronous.
-     *
-     * @param surface surface returned by getVideoSurface or getSubtitlesSurface
-     * @param width surface width
-     * @param height surface height
-     * @param format color format (or PixelFormat)
-     * @return true if buffersGeometry were set (only before ICS)
-     */
-    @SuppressWarnings("unused") /* used by JNI */
-    private boolean setBuffersGeometry(final Surface surface, final int width, final int height, final int format) {
-        return false;
-    }
-
-    /**
      * Set the video Layout.
      * This call will result of{@link IVLCVout.OnNewVideoLayoutListener#onNewVideoLayout(IVLCVout, int, int, int, int, int, int)}
      * being called from the main thread.
