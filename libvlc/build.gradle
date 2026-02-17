@@ -11,10 +11,12 @@ def libvlc_revision = providers.exec {
     commandLine('git', 'rev-parse', '--short', 'HEAD')
 }.standardOutput.asText.get().trim()
 
-def vlc_revision = providers.exec {
-    workingDir('vlc')
+def vlcSourceDir = "$projectDir/../vlc"
+File vlcSourcesFile = file("$vlcSourceDir/NEWS")
+def vlc_revision = vlcSourcesFile.exists() ? providers.exec {
+    workingDir(vlcSourceDir)
     commandLine('git', 'rev-parse', '--short', 'HEAD')
-}.standardOutput.asText.get().trim()
+}.standardOutput.asText.get().trim() : 'unknown'
 
 android {
     namespace = 'org.videolan'
