@@ -151,27 +151,27 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
                     return;
                 final boolean videoSwapped = vtrack.orientation == IMedia.VideoTrack.Orientation.LeftBottom
                         || vtrack.orientation == IMedia.VideoTrack.Orientation.RightTop;
-                    int videoW = vtrack.width;
-                    int videoH = vtrack.height;
+                int videoW = vtrack.width;
+                int videoH = vtrack.height;
 
-                    if (videoSwapped) {
-                        int swap = videoW;
-                        videoW = videoH;
-                        videoH = swap;
-                    }
-                    if (vtrack.sarNum != vtrack.sarDen)
-                        videoW = videoW * vtrack.sarNum / vtrack.sarDen;
+                if (videoSwapped) {
+                    int swap = videoW;
+                    videoW = videoH;
+                    videoH = swap;
+                }
+                if (vtrack.sarNum != vtrack.sarDen)
+                    videoW = videoW * vtrack.sarNum / vtrack.sarDen;
 
-                    float ar = videoW / (float) videoH;
-                    float dar = displayW / (float) displayH;
+                float ar = videoW / (float) videoH;
+                float dar = displayW / (float) displayH;
 
-                    float scale;
-                    if (dar >= ar)
-                        scale = displayW / (float) videoW; /* horizontal */
-                    else
-                        scale = displayH / (float) videoH; /* vertical */
-                    mMediaPlayer.setNativeScale(scale);
-                    mMediaPlayer.setAspectRatio(null);
+                float scale;
+                if (dar >= ar)
+                    scale = displayW / (float) videoW; /* horizontal */
+                else
+                    scale = displayH / (float) videoH; /* vertical */
+                mMediaPlayer.setNativeScale(scale);
+                mMediaPlayer.setAspectRatio(null);
                 break;
             }
             case SURFACE_FILL: {
@@ -180,9 +180,9 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
                     return;
                 final boolean videoSwapped = vtrack.orientation == IMedia.VideoTrack.Orientation.LeftBottom
                         || vtrack.orientation == IMedia.VideoTrack.Orientation.RightTop;
-                    mMediaPlayer.setNativeScale(0);
-                    mMediaPlayer.setAspectRatio(!videoSwapped ? ""+displayW+":"+displayH
-                            : ""+displayH+":"+displayW);
+                mMediaPlayer.setNativeScale(0);
+                mMediaPlayer.setAspectRatio(!videoSwapped ? ""+displayW+":"+displayH
+                        : ""+displayH+":"+displayW);
                 break;
             }
             case SURFACE_16_9:
