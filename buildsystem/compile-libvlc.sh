@@ -147,30 +147,6 @@ VLC_BUILD_DIR="$(cd $VLC_SRC_DIR/; pwd)/build-android-${TARGET_TUPLE}"
 VLC_OUT_PATH="$VLC_BUILD_DIR/ndk"
 mkdir -p $VLC_OUT_PATH
 
-#################
-# NDK TOOLCHAIN #
-#################
-host_tag=""
-case $(uname | tr '[:upper:]' '[:lower:]') in
-  linux*)   host_tag="linux" ;;
-  darwin*)  host_tag="darwin" ;;
-  msys*)    host_tag="windows" ;;
-  *)        echo "host OS not handled"; exit 1 ;;
-esac
-NDK_TOOLCHAIN_DIR=${ANDROID_NDK}/toolchains/llvm/prebuilt/${host_tag}-x86_64
-NDK_TOOLCHAIN_PATH=${NDK_TOOLCHAIN_DIR}/bin
-# Add the NDK toolchain to the PATH, needed both for contribs and for building
-# stub libraries
-CROSS_TOOLS=${NDK_TOOLCHAIN_PATH}/llvm-
-CROSS_CLANG=${NDK_TOOLCHAIN_PATH}/${CLANG_PREFIX}${ANDROID_API}-clang
-
-export PATH="${NDK_TOOLCHAIN_PATH}:${PATH}"
-NDK_BUILD=$ANDROID_NDK/ndk-build
-if [ ! -z "$MSYSTEM_PREFIX" ] ; then
-    # The make.exe and awk.exe from the toolchain don't work in msys
-    export PATH="$MSYSTEM_PREFIX/bin:/usr/bin:${NDK_TOOLCHAIN_PATH}:${PATH}"
-    NDK_BUILD=$NDK_BUILD.cmd
-fi
 
 ##########
 # CFLAGS #
@@ -196,9 +172,6 @@ fi
 # Release or not?
 if [ "$AVLC_RELEASE" = 1 ]; then
     VLC_CFLAGS="${VLC_CFLAGS} -DNDEBUG "
-    NDK_DEBUG=0
-else
-    NDK_DEBUG=1
 fi
 
 ###############
