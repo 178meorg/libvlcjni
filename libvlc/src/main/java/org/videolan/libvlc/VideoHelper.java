@@ -104,7 +104,10 @@ class VideoHelper implements IVLCVout.OnNewVideoLayoutListener {
                 private final Runnable runnable = new Runnable() {
                     @Override
                     public void run() {
-                        if (mVideoSurfaceFrame != null && mOnLayoutChangeListener != null) updateVideoSurfaces();
+                        if (mVideoSurfaceFrame != null && mOnLayoutChangeListener != null) {
+                            updateVideoSurfaces();
+                            updateVideoDimensions();
+                        }
                     }
                 };
                 @Override
