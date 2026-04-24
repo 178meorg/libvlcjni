@@ -564,10 +564,12 @@ mkdir -p $VLC_BUILD_DIR
 # CONFIGURE #
 #############
 
+# android APIs < 26 have empty sys/shm.h headers that triggers shm detection
+# but it doesn't have any shm functions and/or symbols.
+# Pass as configure argument so autoconf reliably honours the override.
+VLC_CONFIGURE_OVERRIDES=""
 if [ ${ANDROID_API} -lt "26" ]; then
-    # android APIs < 26 have empty sys/shm.h headers that triggers shm detection but it
-    # doesn't have any shm functions and/or symbols. */
-    export ac_cv_header_sys_shm_h=no
+    VLC_CONFIGURE_OVERRIDES="ac_cv_header_sys_shm_h=no"
 fi
 
 if [ ! -e $VLC_BUILD_DIR/config.h -o "$AVLC_RELEASE" = 1 ]; then
@@ -591,7 +593,8 @@ if [ ! -e $VLC_BUILD_DIR/config.h -o "$AVLC_RELEASE" = 1 ]; then
     ../configure --host=$TARGET_TUPLE \
         --with-contrib=${VLC_SRC_DIR}/contrib/${TARGET_TUPLE} \
         --prefix=${VLC_BUILD_DIR}/install/ \
-        ${EXTRA_PARAMS} ${VLC_CONFIGURE_ARGS} ${VLC_CONFIGURE_DEBUG}
+        ${EXTRA_PARAMS} ${VLC_CONFIGURE_ARGS} ${VLC_CONFIGURE_DEBUG} \
+        ${VLC_CONFIGURE_OVERRIDES}
     cd "$BEFORE_VLC_BUILD_DIR"
     avlc_checkfail "vlc: configure failed"
 fi
