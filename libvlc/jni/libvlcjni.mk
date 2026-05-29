@@ -18,6 +18,7 @@ LOCAL_C_INCLUDES := $(VLC_SRC_DIR)/include
 LOCAL_CFLAGS := -std=c17
 LOCAL_LDLIBS := -llog
 LOCAL_LDFLAGS += "-Wl,-z,max-page-size=16384"
+LOCAL_LDFLAGS += "-Wl,--gc-sections"
 LOCAL_SHARED_LIBRARIES := libvlc
 
 include $(BUILD_SHARED_LIBRARY)
