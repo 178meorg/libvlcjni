@@ -181,7 +181,7 @@ fi
 # cf. GLOBAL_CFLAGS from ${ANDROID_NDK}/build/core/default-build-commands.mk
 VLC_CFLAGS="${VLC_CFLAGS} -fPIC -fdata-sections -ffunction-sections -funwind-tables \
  -fstack-protector-strong -no-canonical-prefixes --start-no-unused-arguments -Wl,-z,max-page-size=16384 --end-no-unused-arguments"
-VLC_CXXFLAGS="-fexceptions -frtti --start-no-unused-arguments -Wl,-z,max-page-size=16384 --end-no-unused-arguments"
+VLC_CXXFLAGS="-fexceptions -frtti --start-no-unused-arguments -Wl,-z,max-page-size=16384 --end-no-unused-arguments -fdata-sections -ffunction-sections"
 VLC_LDFLAGS="-z max-page-size=16384"
 
 # Release or not?

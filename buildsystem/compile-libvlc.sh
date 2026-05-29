@@ -186,7 +186,7 @@ fi
 # cf. GLOBAL_CFLAGS from ${ANDROID_NDK}/build/core/default-build-commands.mk
 VLC_CFLAGS="${VLC_CFLAGS} -fPIC -fdata-sections -ffunction-sections -funwind-tables \
  -fstack-protector-strong -no-canonical-prefixes"
-VLC_CXXFLAGS="-fexceptions -frtti"
+VLC_CXXFLAGS="-fexceptions -frtti -fdata-sections -ffunction-sections"
 
 if [ "$AVLC_STATIC_CXX" = 1 ]; then
     VLC_CXXFLAGS="$VLC_CXXFLAGS --start-no-unused-arguments -static -static-libstdc++ --end-no-unused-arguments"
