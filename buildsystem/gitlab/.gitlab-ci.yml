@@ -1,13 +1,13 @@
 cache:
     paths:
         - .gradle/
-        - gradle-7.2/
+        - gradle-9.3.1/
         - gradle/
         - gradlew
 
 default:
   interruptible: true
-  image: registry.videolan.org/vlc-debian-android:20250626142950
+  image: registry.videolan.org/vlc-debian-android:20260610055743
   tags:
     - amd64
     - docker
