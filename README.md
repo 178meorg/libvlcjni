@@ -69,8 +69,8 @@ sudo apt install automake ant autopoint cmake build-essential libtool-bin \
 ```
 
 Setup the build environment:
-Set `$ANDROID_SDK` to point to your Android SDK directory
-`export ANDROID_SDK=/path/to/android-sdk`
+Set `$ANDROID_HOME` to point to your Android SDK directory
+`export ANDROID_HOME=/path/to/android-sdk`
 
 Set `$ANDROID_NDK` to point to your Android NDK directory
 `export ANDROID_NDK=/path/to/android-ndk`

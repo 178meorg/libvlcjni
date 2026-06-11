@@ -25,7 +25,6 @@ stages:
         fi
         ./buildsystem/compile-libvlc.sh -a ${ARCH} $CONTRIB_FLAGS $CONFIG_ARGS
 
-        echo "sdk.dir=$ANDROID_SDK" > local.properties
         gradle assembleDebug --configuration-cache
 
     rules:

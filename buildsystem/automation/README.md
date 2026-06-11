@@ -20,7 +20,7 @@ Even if Linux is not officially supported, it can be installed easily.
 
 The Android SDK has to be installed and you have to set an env variable to its path
 
-`export ANDROID_SDK=/path/to/sdk/`
+`export ANDROID_HOME=/path/to/sdk/`
 
 ## Usage
 
