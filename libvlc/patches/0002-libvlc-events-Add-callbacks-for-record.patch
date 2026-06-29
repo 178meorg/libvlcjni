@@ -1,7 +1,7 @@
-From d41af028bc280f94affa4f11afb28bd28c7ac47b Mon Sep 17 00:00:00 2001
-Message-ID: <d41af028bc280f94affa4f11afb28bd28c7ac47b.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From ca9815dafb0e64e0b7162d70fb05f656de413536 Mon Sep 17 00:00:00 2001
+Message-ID: <ca9815dafb0e64e0b7162d70fb05f656de413536.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Soomin Lee <bubu@mikan.io>
 Date: Thu, 27 Sep 2018 18:40:39 +0200
 Subject: [PATCH 02/20] libvlc: events: Add callbacks for record

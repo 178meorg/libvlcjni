@@ -1,7 +1,7 @@
-From e38747acb9cbf2f01f466a5e5b0f0aaf5bd1130a Mon Sep 17 00:00:00 2001
-Message-ID: <e38747acb9cbf2f01f466a5e5b0f0aaf5bd1130a.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From d2b83c432ec2e05a654e72e885db1c5f96876e9c Mon Sep 17 00:00:00 2001
+Message-ID: <d2b83c432ec2e05a654e72e885db1c5f96876e9c.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: =?UTF-8?q?Hugo=20Beauz=C3=A9e-Luyssen?= <hugo@beauzee.fr>
 Date: Fri, 29 Nov 2019 15:41:08 +0100
 Subject: [PATCH 08/20] input: Extract attachment also when preparsing
@@ -992,10 +992,10 @@ index 1b7c2c6b1a..7abe78ec16 100644
      }
      else if( i_query == DEMUX_GET_TITLE_INFO )
 diff --git a/modules/demux/mkv/demux.cpp b/modules/demux/mkv/demux.cpp
-index 321be4ba58..48e38bf7cc 100644
+index 50fff21d74..44b907befc 100644
 --- a/modules/demux/mkv/demux.cpp
 +++ b/modules/demux/mkv/demux.cpp
-@@ -439,8 +439,6 @@ demux_sys_t::~demux_sys_t()
+@@ -525,8 +525,6 @@ demux_sys_t::~demux_sys_t()
          delete opened_segments[i];
      for ( i=0; i<used_vsegments.size(); i++ )
          delete used_vsegments[i];
@@ -1005,11 +1005,11 @@ index 321be4ba58..48e38bf7cc 100644
  
      while( titles.size() )
 diff --git a/modules/demux/mkv/demux.hpp b/modules/demux/mkv/demux.hpp
-index dc67c613fd..282b095614 100644
+index b2606192fc..150cd21796 100644
 --- a/modules/demux/mkv/demux.hpp
 +++ b/modules/demux/mkv/demux.hpp
-@@ -290,6 +290,8 @@ typedef struct {
- #endif
+@@ -204,6 +204,8 @@ struct pci_t {
+ 
  ////////////////////////////////////////
  
 +#include <memory>
@@ -1017,7 +1017,7 @@ index dc67c613fd..282b095614 100644
  class virtual_segment_c;
  class chapter_item_c;
  
-@@ -362,7 +364,8 @@ public:
+@@ -276,7 +278,8 @@ public:
      size_t                           i_current_title;
  
      std::vector<matroska_stream_c*>  streams;
@@ -1028,10 +1028,10 @@ index dc67c613fd..282b095614 100644
      std::vector<virtual_segment_c*>  used_vsegments;
      virtual_segment_c                *p_current_vsegment;
 diff --git a/modules/demux/mkv/matroska_segment_parse.cpp b/modules/demux/mkv/matroska_segment_parse.cpp
-index 89de7aecd7..b959b9c993 100644
+index 86819a7fa5..ccd7d09c7d 100644
 --- a/modules/demux/mkv/matroska_segment_parse.cpp
 +++ b/modules/demux/mkv/matroska_segment_parse.cpp
-@@ -1309,33 +1309,31 @@ void matroska_segment_c::ParseAttachments( KaxAttachments *attachments )
+@@ -1351,33 +1351,31 @@ void matroska_segment_c::ParseAttachments( KaxAttachments *attachments )
      {
          KaxFileData  &img_data     = GetChild<KaxFileData>( *attachedFile );
          std::string attached_filename( UTFstring( GetChild<KaxFileName>( *attachedFile ) ).GetUTF8() );
@@ -1084,7 +1084,7 @@ index 89de7aecd7..b959b9c993 100644
      }
  }
 diff --git a/modules/demux/mkv/mkv.cpp b/modules/demux/mkv/mkv.cpp
-index b5d369eba1..88f56ce7dc 100644
+index 1b393e8c1f..cb8752aef4 100644
 --- a/modules/demux/mkv/mkv.cpp
 +++ b/modules/demux/mkv/mkv.cpp
 @@ -313,14 +313,7 @@ static int Control( demux_t *p_demux, int i_query, va_list args )

@@ -1,7 +1,7 @@
-From 1246c386fa0b42dec2ed6ca8a99dda2b0d0b29c2 Mon Sep 17 00:00:00 2001
-Message-ID: <1246c386fa0b42dec2ed6ca8a99dda2b0d0b29c2.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From ed597087ba5e4297b858618a5ffe80aa26b31b57 Mon Sep 17 00:00:00 2001
+Message-ID: <ed597087ba5e4297b858618a5ffe80aa26b31b57.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Thomas Guillem <thomas@gllm.fr>
 Date: Sun, 10 Jun 2018 20:36:06 +0300
 Subject: [PATCH 16/20] access: add a cache helper
@@ -425,7 +425,7 @@ index 0000000000..9ace4d07ce
 +
 +#endif /* VLC_LIST_H */
 diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
-index e066036dc5..d252ec0de7 100644
+index fca3b684d2..7519162f01 100644
 --- a/modules/access/Makefile.am
 +++ b/modules/access/Makefile.am
 @@ -442,3 +442,11 @@ librist_plugin_la_LIBADD = $(LIBRIST_LIBS) $(SOCKET_LIBS) $(LIBPTHREAD)

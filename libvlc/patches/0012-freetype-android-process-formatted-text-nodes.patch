@@ -1,7 +1,7 @@
-From b8359c2749c247ffdd5f31e58f4b763768393ac7 Mon Sep 17 00:00:00 2001
-Message-ID: <b8359c2749c247ffdd5f31e58f4b763768393ac7.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From c82c284d1f04704fb6d77117cca09c3712776ec4 Mon Sep 17 00:00:00 2001
+Message-ID: <c82c284d1f04704fb6d77117cca09c3712776ec4.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Francois Cartegnie <fcvlcdev@free.fr>
 Date: Thu, 2 Dec 2021 10:06:28 +0100
 Subject: [PATCH 12/20] freetype: android: process formatted text nodes

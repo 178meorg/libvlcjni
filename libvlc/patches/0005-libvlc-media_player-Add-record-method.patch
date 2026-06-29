@@ -1,7 +1,7 @@
-From 7577a045794c19973a6d66b5850768a14e49a705 Mon Sep 17 00:00:00 2001
-Message-ID: <7577a045794c19973a6d66b5850768a14e49a705.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From d0e17df850e0780044ec83071175946558216e5f Mon Sep 17 00:00:00 2001
+Message-ID: <d0e17df850e0780044ec83071175946558216e5f.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Soomin Lee <bubu@mikan.io>
 Date: Wed, 31 Oct 2018 10:08:55 +0100
 Subject: [PATCH 05/20] libvlc: media_player: Add record method

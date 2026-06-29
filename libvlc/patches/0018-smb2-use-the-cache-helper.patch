@@ -1,7 +1,7 @@
-From 334b917a1d7e30515563e3496395a2444cacdea2 Mon Sep 17 00:00:00 2001
-Message-ID: <334b917a1d7e30515563e3496395a2444cacdea2.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From 1e05259fcb7db4b7870b543dbadf228115723a51 Mon Sep 17 00:00:00 2001
+Message-ID: <1e05259fcb7db4b7870b543dbadf228115723a51.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Thomas Guillem <thomas@gllm.fr>
 Date: Fri, 21 Jan 2022 17:28:13 +0100
 Subject: [PATCH 18/20] smb2: use the cache helper
@@ -26,7 +26,7 @@ Message-Id: <636e15fd3015908fb5211dcb2d2c7d5585ba2cc1.1738244316.git.dcn.mcnamar
  2 files changed, 52 insertions(+), 6 deletions(-)
 
 diff --git a/modules/access/Makefile.am b/modules/access/Makefile.am
-index d8a71df64b..1e75064051 100644
+index 0bf0309a3b..1cacbbb885 100644
 --- a/modules/access/Makefile.am
 +++ b/modules/access/Makefile.am
 @@ -354,7 +354,7 @@ EXTRA_LTLIBRARIES += libdsm_plugin.la
@@ -39,7 +39,7 @@ index d8a71df64b..1e75064051 100644
  if HAVE_DSM
  libsmb2_plugin_la_CFLAGS += $(DSM_CFLAGS) -DHAVE_DSM
 diff --git a/modules/access/smb2.c b/modules/access/smb2.c
-index 40348547c4..17e96ca64a 100644
+index 23dbc6bcc6..a3d4920a97 100644
 --- a/modules/access/smb2.c
 +++ b/modules/access/smb2.c
 @@ -94,6 +94,7 @@ netbios_ns_interrupt_unregister(void)
@@ -68,7 +68,7 @@ index 40348547c4..17e96ca64a 100644
  };
  
  struct vlc_smb2_op
-@@ -687,6 +692,16 @@ error:
+@@ -690,6 +695,16 @@ error:
      return op.error_status;
  }
  
@@ -85,7 +85,7 @@ index 40348547c4..17e96ca64a 100644
  static int
  vlc_smb2_connect_open_share(stream_t *access, const char *url,
                              const vlc_credential *credential,
-@@ -722,6 +737,30 @@ vlc_smb2_connect_open_share(stream_t *access, const char *url,
+@@ -725,6 +740,30 @@ vlc_smb2_connect_open_share(stream_t *access, const char *url,
          password = guest_with_valid_passwd ? "" : NULL;
      }
  
@@ -116,7 +116,7 @@ index 40348547c4..17e96ca64a 100644
      smb2_set_security_mode(sys->smb2, SMB2_NEGOTIATE_SIGNING_ENABLED);
      smb2_set_password(sys->smb2, password);
      smb2_set_domain(sys->smb2, domain ? domain : "");
-@@ -748,6 +787,15 @@ vlc_smb2_connect_open_share(stream_t *access, const char *url,
+@@ -751,6 +790,15 @@ vlc_smb2_connect_open_share(stream_t *access, const char *url,
          goto error;
      }
  
@@ -132,7 +132,7 @@ index 40348547c4..17e96ca64a 100644
      smb2_destroy_url(smb2_url);
      return 0;
  
-@@ -989,11 +1037,9 @@ Close(vlc_object_t *p_obj)
+@@ -992,11 +1040,9 @@ Close(vlc_object_t *p_obj)
      assert(sys->smb2_connected);
  
      if (sys->smb2 != NULL)

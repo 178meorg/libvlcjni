@@ -1,7 +1,7 @@
-From 48d5f644bf827590b2177054da08ee82a5463fd6 Mon Sep 17 00:00:00 2001
-Message-ID: <48d5f644bf827590b2177054da08ee82a5463fd6.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From 61a0ad9e6a69ba912f9e59e1d4c451f671623da4 Mon Sep 17 00:00:00 2001
+Message-ID: <61a0ad9e6a69ba912f9e59e1d4c451f671623da4.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Thomas Guillem <thomas@gllm.fr>
 Date: Thu, 2 Jul 2020 15:05:01 +0200
 Subject: [PATCH 06/20] input: es_out: set video exclusive

@@ -1,7 +1,7 @@
-From fb983bc9231625c38e72156794d607e1336e6b35 Mon Sep 17 00:00:00 2001
-Message-ID: <fb983bc9231625c38e72156794d607e1336e6b35.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From 296eec66406cb2bb882fcd671a9ec051741c7354 Mon Sep 17 00:00:00 2001
+Message-ID: <296eec66406cb2bb882fcd671a9ec051741c7354.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Pierre Ynard <linkfanel@yahoo.fr>
 Date: Mon, 20 Jul 2020 13:11:34 +0200
 Subject: [PATCH 07/20] stream_ReadLine: increase line length limit

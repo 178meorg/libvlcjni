@@ -1,7 +1,7 @@
-From 8b9407511088ee3270fa31d48c73efb9f3ff40f5 Mon Sep 17 00:00:00 2001
-Message-ID: <8b9407511088ee3270fa31d48c73efb9f3ff40f5.1781516499.git.robux4@ycbcr.xyz>
-In-Reply-To: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
-References: <7e474a1810b2e5d0c838875f8a64a272995760f2.1781516499.git.robux4@ycbcr.xyz>
+From f21a841695a55cc8180dbc88e3c3c219124b3b38 Mon Sep 17 00:00:00 2001
+Message-ID: <f21a841695a55cc8180dbc88e3c3c219124b3b38.1783491438.git.robux4@ycbcr.xyz>
+In-Reply-To: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
+References: <1e4ed1d4abbcfbf02ef80e000ce8ebd841dcf667.1783491438.git.robux4@ycbcr.xyz>
 From: Alaric Senat <dev.asenat@posteo.net>
 Date: Tue, 4 Oct 2022 14:19:02 +0200
 Subject: [PATCH 19/20] upnp: android: implement net-intf priority

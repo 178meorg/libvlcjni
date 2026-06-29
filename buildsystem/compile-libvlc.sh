@@ -297,7 +297,6 @@ VLC_CONTRIB_ARGS="\
     --disable-schroedinger \
     --disable-sdl \
     --disable-SDL_image \
-    --disable-fontconfig \
     --enable-zvbi \
     --disable-kate \
     --disable-caca \
