@@ -294,7 +294,6 @@ VLC_CONTRIB_ARGS="\
     --disable-goom \
     --disable-chromaprint \
     --enable-lua \
-    --disable-schroedinger \
     --disable-sdl \
     --disable-SDL_image \
     --enable-zvbi \
@@ -392,7 +391,6 @@ VLC_CONFIGURE_ARGS="\
     --enable-sout \
     --enable-vorbis \
     --disable-faad \
-    --disable-schroedinger \
     --disable-vnc \
     --enable-jpeg \
     --enable-smb2 \
