@@ -31,7 +31,7 @@ allprojects {
 }
 
 ext {
-    libvlcVersion = '3.7.4'
+    libvlcVersion = '3.7.5'
     androidxLegacyVersion = '1.0.0'
     androidxAnnotationVersion = '1.7.1'
 }
