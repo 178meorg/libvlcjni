@@ -44,17 +44,19 @@ check_patch_is_applied()
 }
 
 VLC_TESTED_HASH=ac6c2a405d652b5576128ceb9fec2c342f0e83ec
-VLC_REPOSITORY=https://code.videolan.org/videolan/vlc.git
+VLC_REPOSITORY=https://github.com/178meorg/vlc.git
 VLC_BRANCH=3.0.x
 
 RESET=0
+APPLY_PATCHES=${VLC_APPLY_PATCHES:-1}
 while [ $# -gt 0 ]; do
     case $1 in
         help|--help|-h)
             echo "Use -b to bypass libvlc source checks (vlc custom sources)"
-            echo "  --vlcgit <vlc_git_url> (default $VLC_TESTED_HASH)"
-            echo "  --vlchash <vlc_git_hash> (default $VLC_REPOSITORY)"
+            echo "  --vlcgit <vlc_git_url> (default $VLC_REPOSITORY)"
+            echo "  --vlchash <vlc_git_hash> (default $VLC_TESTED_HASH)"
             echo "  --vlcbranch <branch_name> (default $VLC_BRANCH)"
+            echo "  --no-patches skip the libvlcjni patch series"
             exit 0
             ;;
         --reset)
@@ -71,6 +73,9 @@ while [ $# -gt 0 ]; do
         --vlcbranch)
             VLC_BRANCH=$2
             shift
+            ;;
+        --no-patches|--skip-patches)
+            APPLY_PATCHES=0
             ;;
         -b)
             BYPASS_VLC_SRC_CHECKS=1
@@ -94,14 +99,20 @@ if [ ! -d "vlc" ]; then
     cd vlc
     diagnostic "VLC sources: resetting to the VLC_TESTED_HASH commit (${VLC_TESTED_HASH})"
     git reset --hard ${VLC_TESTED_HASH} || fail "VLC sources: VLC_TESTED_HASH ${VLC_TESTED_HASH} not found"
-    diagnostic "VLC sources: applying custom patches"
-    # Keep Message-Id inside commits description to track them afterwards
-    git am --message-id $PATCHES_DIR/*.patch || fail "VLC sources: cannot apply custom patches"
+    if [ "$APPLY_PATCHES" -eq 1 ]; then
+        diagnostic "VLC sources: applying custom patches"
+        # Keep Message-Id inside commits description to track them afterwards
+        git am --message-id $PATCHES_DIR/*.patch || fail "VLC sources: cannot apply custom patches"
+    else
+        diagnostic "VLC sources: skipping custom patches"
+    fi
     cd ..
 else
     diagnostic "VLC source: found sources, leaving untouched"
 fi
-if [ "$BYPASS_VLC_SRC_CHECKS" = 1 ]; then
+if [ "$APPLY_PATCHES" -eq 0 ]; then
+    diagnostic "VLC sources: custom patches disabled"
+elif [ "$BYPASS_VLC_SRC_CHECKS" = 1 ]; then
     diagnostic "VLC sources: Bypassing checks (required by option)"
 elif [ $RESET -eq 1 ]; then
     cd vlc

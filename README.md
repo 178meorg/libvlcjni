@@ -79,7 +79,22 @@ Then, you are ready to build!
 
 #### Build
 
-`buildsystem/compile.sh -l -a <ABI>`
+Fetch the VLC source and build one ABI with:
+
+```bash
+./buildsystem/get-vlc.sh \
+    --no-patches \
+    --vlcgit https://github.com/178meorg/vlc.git \
+    --vlcbranch 3.0.x \
+    --vlchash <vlc-commit>
+./buildsystem/compile-libvlc.sh -a <ABI>
+gradle assembleDebug --configuration-cache
+```
+
+The GitHub Actions workflow at `.github/workflows/libvlc3.yml` builds
+`armeabi-v7a` and `arm64-v8a`, then packages both into one AAR. An empty
+`vlc_sha` in a manually dispatched workflow resolves the latest `3.0.x`
+commit; set it to a full SHA for a reproducible build.
 
 ABI can be `arm`, `arm64`, `x86`, `x86_64` or `all` for a multi-abis build
 

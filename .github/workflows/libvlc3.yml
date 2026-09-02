@@ -1,0 +1,179 @@
+name: libvlc3
+
+on:
+  push:
+    branches:
+      - libvlc3
+      - libvlcjni-3.x
+      - upstream/libvlcjni-3.x
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      vlc_sha:
+        description: Optional VLC commit to pin; empty means the latest 3.0.x tip
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: libvlc3-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VLC_GIT_URL: https://github.com/178meorg/vlc.git
+  VLC_GIT_BRANCH: 3.0.x
+
+jobs:
+  resolve-vlc:
+    name: resolve-vlc-commit
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.select.outputs.sha }}
+    steps:
+      - name: Select VLC commit
+        id: select
+        shell: bash
+        env:
+          PINNED_SHA: ${{ inputs.vlc_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PINNED_SHA" ]]; then
+            selected_sha="$PINNED_SHA"
+          else
+            selected_sha="$(git ls-remote "$VLC_GIT_URL" "refs/heads/$VLC_GIT_BRANCH" | awk 'NR == 1 { print $1 }')"
+          fi
+          test -n "$selected_sha"
+          echo "sha=$selected_sha" >> "$GITHUB_OUTPUT"
+          echo "Using VLC commit $selected_sha"
+
+  build-native:
+    name: native-${{ matrix.name }}
+    needs: resolve-vlc
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ matrix.image }}
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: armv7
+            arch: arm
+            abi_dir: armeabi-v7a
+            image: registry.videolan.org/vlc-debian-android-3.0:20260701183656
+          - name: arm64
+            arch: arm64
+            abi_dir: arm64-v8a
+            image: registry.videolan.org/vlc-debian-android:20260611225331
+    env:
+      ARCH: ${{ matrix.arch }}
+      ABI_DIR: ${{ matrix.abi_dir }}
+      VLC_GIT_SHA: ${{ needs.resolve-vlc.outputs.sha }}
+
+    steps:
+      - name: Check out libvlcjni
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Fetch VLC source without project patches
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf vlc
+          ./buildsystem/get-vlc.sh \
+            --no-patches \
+            --vlcgit "$VLC_GIT_URL" \
+            --vlcbranch "$VLC_GIT_BRANCH" \
+            --vlchash "$VLC_GIT_SHA"
+
+      - name: Build native libraries
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./buildsystem/compile-libvlc.sh -a "$ARCH"
+          test -s "libvlc/jni/libs/$ABI_DIR/libvlc.so"
+          test -s "libvlc/jni/libs/$ABI_DIR/libvlcjni.so"
+          test -s "libvlc/jni/libs/$ABI_DIR/libc++_shared.so"
+          file "libvlc/jni/libs/$ABI_DIR/libvlc.so" "libvlc/jni/libs/$ABI_DIR/libvlcjni.so"
+
+      - name: Upload native libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.name }}
+          path: libvlc/jni/libs/${{ matrix.abi_dir }}/*.so
+          if-no-files-found: error
+          retention-days: 7
+
+  package-aar:
+    name: package-universal-aar
+    needs: [resolve-vlc, build-native]
+    runs-on: ubuntu-24.04
+    container:
+      image: registry.videolan.org/vlc-debian-android:20260611225331
+      options: --user root
+    env:
+      VLC_GIT_SHA: ${{ needs.resolve-vlc.outputs.sha }}
+      GRADLE_ABI: all
+    steps:
+      - name: Check out libvlcjni
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Fetch VLC assets without project patches
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf vlc
+          ./buildsystem/get-vlc.sh \
+            --no-patches \
+            --vlcgit "$VLC_GIT_URL" \
+            --vlcbranch "$VLC_GIT_BRANCH" \
+            --vlchash "$VLC_GIT_SHA"
+
+      - name: Download armv7 libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: native-armv7
+          path: libvlc/jni/libs/armeabi-v7a
+
+      - name: Download arm64 libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: native-arm64
+          path: libvlc/jni/libs/arm64-v8a
+
+      - name: Verify native libraries
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -s libvlc/jni/libs/armeabi-v7a/libvlc.so
+          test -s libvlc/jni/libs/armeabi-v7a/libvlcjni.so
+          test -s libvlc/jni/libs/armeabi-v7a/libc++_shared.so
+          test -s libvlc/jni/libs/arm64-v8a/libvlc.so
+          test -s libvlc/jni/libs/arm64-v8a/libvlcjni.so
+          test -s libvlc/jni/libs/arm64-v8a/libc++_shared.so
+
+      - name: Assemble universal AAR
+        shell: bash
+        run: gradle assembleDebug --configuration-cache
+
+      - name: Upload universal AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvlc3-universal
+          path: libvlc/build/outputs/aar/*.aar
+          if-no-files-found: error
+          retention-days: 14
