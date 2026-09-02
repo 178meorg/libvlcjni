@@ -448,7 +448,12 @@ Java_org_videolan_libvlc_MediaPlayer_nativeSetTime(JNIEnv *env, jobject thiz,
     if (!p_obj)
         return;
 
+#if defined(LIBVLC_VERSION_MAJOR) && LIBVLC_VERSION_MAJOR >= 4
     libvlc_media_player_set_time(p_obj->u.p_mp, time, fast);
+#else
+    (void) fast;
+    libvlc_media_player_set_time(p_obj->u.p_mp, time);
+#endif
 }
 
 jfloat
@@ -471,7 +476,12 @@ Java_org_videolan_libvlc_MediaPlayer_nativeSetPosition(JNIEnv *env, jobject thiz
     if (!p_obj)
         return;
 
+#if defined(LIBVLC_VERSION_MAJOR) && LIBVLC_VERSION_MAJOR >= 4
     libvlc_media_player_set_position(p_obj->u.p_mp, pos, fast);
+#else
+    (void) fast;
+    libvlc_media_player_set_position(p_obj->u.p_mp, pos);
+#endif
 
 }
 
@@ -1332,5 +1342,4 @@ Java_org_videolan_libvlc_MediaPlayer_nativeGetTeletext(JNIEnv *env,
 
     return libvlc_video_get_teletext(p_obj->u.p_mp);
 }
-
 
