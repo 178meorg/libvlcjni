@@ -96,6 +96,49 @@ The GitHub Actions workflow at `.github/workflows/libvlc3.yml` builds
 `vlc_sha` in a manually dispatched workflow resolves the latest `3.0.x`
 commit; set it to a full SHA for a reproducible build.
 
+### Publish to GitHub Packages
+
+Push a tag named `libvlc-<version>` to build and publish the universal AAR:
+
+```bash
+git tag libvlc-3.7.5-1
+git push origin libvlc-3.7.5-1
+```
+
+The published Maven coordinate is:
+
+```text
+io.github.178meorg:libvlc3-all:3.7.5-1
+```
+
+GitHub Packages requires authentication when resolving Maven packages. Add
+the repository and credentials to the consuming Gradle build, using a GitHub
+personal access token with `read:packages`. Keep the credentials outside the
+project, for example in `~/.gradle/gradle.properties`:
+
+```properties
+gpr.user=<github-user>
+gpr.key=<github-token>
+```
+
+```gradle
+repositories {
+    google()
+    mavenCentral()
+    maven {
+        url = uri('https://maven.pkg.github.com/178meorg/libvlcjni')
+        credentials {
+            username = providers.gradleProperty('gpr.user').orNull
+            password = providers.gradleProperty('gpr.key').orNull
+        }
+    }
+}
+
+dependencies {
+    implementation 'io.github.178meorg:libvlc3-all:3.7.5-1'
+}
+```
+
 ABI can be `arm`, `arm64`, `x86`, `x86_64` or `all` for a multi-abis build
 
 You can do a library release build with `-r` argument
