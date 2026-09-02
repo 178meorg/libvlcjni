@@ -96,15 +96,17 @@ jobs:
 
       - name: Configure Git
         shell: bash
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Fetch VLC source without project patches
+      - name: Fetch VLC source with project patches
         shell: bash
         run: |
           set -euxo pipefail
           rm -rf vlc
           ./buildsystem/get-vlc.sh \
-            --no-patches \
             --vlcgit "$VLC_GIT_URL" \
             --vlcbranch "$VLC_GIT_BRANCH" \
             --vlchash "$VLC_GIT_SHA"
@@ -145,15 +147,17 @@ jobs:
 
       - name: Configure Git
         shell: bash
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Fetch VLC assets without project patches
+      - name: Fetch VLC assets with project patches
         shell: bash
         run: |
           set -euxo pipefail
           rm -rf vlc
           ./buildsystem/get-vlc.sh \
-            --no-patches \
             --vlcgit "$VLC_GIT_URL" \
             --vlcbranch "$VLC_GIT_BRANCH" \
             --vlchash "$VLC_GIT_SHA"

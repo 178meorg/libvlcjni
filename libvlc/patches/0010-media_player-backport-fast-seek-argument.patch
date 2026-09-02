@@ -15,17 +15,17 @@ Message-Id: <2bb5db161bb592ad8285dc9ebff8d2dd67377879.1664884159.git.dev.asenat@
 Message-Id: <c12502e7927286454abeb35584b32ce6bcc87f51.1664886558.git.dev.asenat@posteo.net>
 Message-Id: <c5e81387db1b48dc6921b5f632886f2372e7f0d4.1738244316.git.dcn.mcnamara@gmail.com>
 ---
- include/vlc/libvlc_media_player.h | 8 ++++++--
+ include/vlc/libvlc_media_player.h | 10 ++++++++--
  lib/media_player.c                | 6 ++++--
  src/input/input.c                 | 7 +++----
  src/input/input_internal.h        | 1 -
- 4 files changed, 13 insertions(+), 9 deletions(-)
+ 4 files changed, 15 insertions(+), 9 deletions(-)
 
 diff --git a/include/vlc/libvlc_media_player.h b/include/vlc/libvlc_media_player.h
-index c1cbffa598..f8e78f49ad 100644
+index c1cbffa598..b7707e5ce3 100644
 --- a/include/vlc/libvlc_media_player.h
 +++ b/include/vlc/libvlc_media_player.h
-@@ -803,8 +803,10 @@ LIBVLC_API libvlc_time_t libvlc_media_player_get_time( libvlc_media_player_t *p_
+@@ -803,8 +803,12 @@ LIBVLC_API libvlc_time_t libvlc_media_player_get_time( libvlc_media_player_t *p_
   *
   * \param p_mi the Media Player
   * \param i_time the movie time (in ms).
@@ -34,10 +34,12 @@ index c1cbffa598..f8e78f49ad 100644
 -LIBVLC_API void libvlc_media_player_set_time( libvlc_media_player_t *p_mi, libvlc_time_t i_time );
 +LIBVLC_API void libvlc_media_player_set_time( libvlc_media_player_t *p_mi,
 +                                              libvlc_time_t i_time, bool b_fast );
++
++#define LIBVLC_MEDIA_PLAYER_HAS_FAST_SEEK
  
  /**
   * Get movie position as percentage between 0.0 and 1.0.
-@@ -821,8 +823,10 @@ LIBVLC_API float libvlc_media_player_get_position( libvlc_media_player_t *p_mi )
+@@ -821,8 +825,10 @@ LIBVLC_API float libvlc_media_player_get_position( libvlc_media_player_t *p_mi )
   *
   * \param p_mi the Media Player
   * \param f_pos the position
@@ -138,4 +140,3 @@ index 3ce907e2de..242af7072d 100644
      bool            b_out_pace_control; /* XXX Move it ot es_sout ? */
 -- 
 2.51.0
-

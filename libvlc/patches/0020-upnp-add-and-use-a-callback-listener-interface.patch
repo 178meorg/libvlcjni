@@ -25,7 +25,7 @@ Message-Id: <0b3cdd05de27ba6eb2fd633483d66ca02df84ef6.1738244316.git.dcn.mcnamar
  2 files changed, 82 insertions(+), 96 deletions(-)
 
 diff --git a/modules/services_discovery/upnp.cpp b/modules/services_discovery/upnp.cpp
-index 5f6e655d43..06d26c6384 100644
+index 71aa39a932..d1268f999f 100644
 --- a/modules/services_discovery/upnp.cpp
 +++ b/modules/services_discovery/upnp.cpp
 @@ -8,10 +8,6 @@
@@ -344,7 +344,7 @@ index 5f6e655d43..06d26c6384 100644
      vlc_mutex_unlock( &s_lock );
  }
 diff --git a/modules/services_discovery/upnp.hpp b/modules/services_discovery/upnp.hpp
-index b90e3cf009..05e948f0eb 100644
+index 352079c595..561ece594b 100644
 --- a/modules/services_discovery/upnp.hpp
 +++ b/modules/services_discovery/upnp.hpp
 @@ -1,13 +1,13 @@
@@ -363,14 +363,13 @@ index b90e3cf009..05e948f0eb 100644
   *
   * This program is free software; you can redistribute it and/or modify it
   * under the terms of the GNU Lesser General Public License as published by
-@@ -30,6 +30,7 @@
+@@ -30,5 +30,6 @@
  
  #include <vector>
  #include <string>
 +#include <memory>
  
  #include <upnp/upnp.h>
- #include <upnp/upnptools.h>
 @@ -60,26 +61,38 @@ namespace SD
   */
  class UpnpInstanceWrapper
@@ -443,4 +442,3 @@ index b90e3cf009..05e948f0eb 100644
      void parseNewServer( IXML_Document* doc, const std::string& location );
 -- 
 2.51.0
-
