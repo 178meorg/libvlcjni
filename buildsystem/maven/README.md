@@ -1,6 +1,34 @@
 # Deploy artifacts
 
-## Prerequisites
+> The original `deploy-to-mavencentral.sh` below is the upstream VideoLAN
+> OSSRH deployment helper and uses VideoLAN's signing key. It is not used for
+> this fork. Use `.github/workflows/libvlc3.yml` and
+> `publish-central.sh` for the `io.github.178meorg` namespace.
+
+## This fork
+
+After verifying the `io.github.178meorg` namespace in the Central Portal, add
+`CENTRAL_USERNAME`, `CENTRAL_PASSWORD`, `SIGNING_KEY` and `SIGNING_PASSWORD`
+as GitHub Actions secrets. A `libvlc-<version>` tag publishes the universal
+AAR automatically. The local helper can also be used by the workflow to build
+the Central bundle:
+
+```bash
+./buildsystem/maven/publish-central.sh \
+    --aar path/to/libvlc-all.aar \
+    --version 3.7.5-2 \
+    --vlc-revision <vlc-commit>
+```
+
+The helper expects the four secrets as environment variables and waits for the
+Central deployment to reach `PUBLISHED`.
+
+## Legacy upstream deployment
+
+The following instructions are retained only for the original VideoLAN
+artifact bundle and must not be used for this fork.
+
+### Prerequisites
 
 ### Signing
 

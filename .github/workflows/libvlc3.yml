@@ -21,8 +21,13 @@ on:
         required: false
         default: false
         type: boolean
+      publish_central:
+        description: Publish the universal AAR to Maven Central
+        required: false
+        default: false
+        type: boolean
       maven_version:
-        description: Maven version used when publish_package is enabled
+        description: Maven version used by a manual package publish
         required: false
         default: ''
         type: string
@@ -312,3 +317,50 @@ jobs:
             -Durl="$MAVEN_REPOSITORY_URL" \
             -Dfile="$AAR_FILE" \
             -DpomFile="$POM_FILE"
+
+  publish-central:
+    name: publish-maven-central
+    if: ${{ startsWith(github.ref, 'refs/tags/libvlc-') || (github.event_name == 'workflow_dispatch' && inputs.publish_central) }}
+    needs: [resolve-vlc, package-aar]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      INPUT_MAVEN_VERSION: ${{ inputs.maven_version }}
+      VLC_GIT_SHA: ${{ needs.resolve-vlc.outputs.sha }}
+      CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+      CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+    steps:
+      - name: Check out libvlcjni
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download universal AAR
+        uses: actions/download-artifact@v4
+        with:
+          name: libvlc3-universal
+          path: package
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Publish to Maven Central
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            maven_version="${GITHUB_REF_NAME#libvlc-}"
+          else
+            maven_version="$INPUT_MAVEN_VERSION"
+          fi
+          test -n "$maven_version"
+          ./buildsystem/maven/publish-central.sh \
+            --aar package \
+            --version "$maven_version" \
+            --vlc-revision "$VLC_GIT_SHA"

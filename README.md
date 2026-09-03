@@ -83,7 +83,6 @@ Fetch the VLC source and build one ABI with:
 
 ```bash
 ./buildsystem/get-vlc.sh \
-    --no-patches \
     --vlcgit https://github.com/178meorg/vlc.git \
     --vlcbranch 3.0.x \
     --vlchash <vlc-commit>
@@ -138,6 +137,38 @@ dependencies {
     implementation 'io.github.178meorg:libvlc3-all:3.7.5-1'
 }
 ```
+
+### Publish to Maven Central
+
+The same workflow can publish the AAR to Maven Central through the Central
+Portal. First verify the `io.github.178meorg` namespace and add these Actions
+secrets to the repository:
+
+```text
+CENTRAL_USERNAME
+CENTRAL_PASSWORD
+SIGNING_KEY
+SIGNING_PASSWORD
+```
+
+Push a new `libvlc-<version>` tag to build, sign and automatically publish the
+universal AAR:
+
+```bash
+git tag libvlc-3.7.5-2
+git push origin libvlc-3.7.5-2
+```
+
+The Central coordinate is:
+
+```text
+io.github.178meorg:libvlc3-all:3.7.5-2
+```
+
+For a test or a version that must not create a tag, use `Actions -> libvlc3 ->
+Run workflow`, enable `publish_central`, and enter `maven_version`. Published
+versions are immutable, so never reuse a version that has already reached
+Maven Central.
 
 ABI can be `arm`, `arm64`, `x86`, `x86_64` or `all` for a multi-abis build
 

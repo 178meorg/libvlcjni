@@ -12,3 +12,4 @@ gradlew
 gradle*/
 .gradle/
 vlc
+signing-key.asc
