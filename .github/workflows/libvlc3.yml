@@ -85,7 +85,7 @@ jobs:
 
     steps:
       - name: Check out libvlcjni
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -117,7 +117,7 @@ jobs:
           file "libvlc/jni/libs/$ABI_DIR/libvlc.so" "libvlc/jni/libs/$ABI_DIR/libvlcjni.so"
 
       - name: Upload native libraries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: native-${{ matrix.name }}
           path: libvlc/jni/libs/${{ matrix.abi_dir }}/*.so
@@ -136,7 +136,7 @@ jobs:
       GRADLE_ABI: all
     steps:
       - name: Check out libvlcjni
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -185,7 +185,7 @@ jobs:
         run: gradle assembleDebug --configuration-cache
 
       - name: Upload universal AAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: libvlc3-universal
           path: libvlc/build/outputs/aar/*.aar
@@ -208,7 +208,7 @@ jobs:
       SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
     steps:
       - name: Check out libvlcjni
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
