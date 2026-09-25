@@ -93,13 +93,13 @@ jobs:
           ./buildsystem/get-vlc.sh
 
       - name: Download armv7 libraries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: native-armv7
           path: libvlc/jni/libs/armeabi-v7a
 
       - name: Download arm64 libraries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: native-arm64
           path: libvlc/jni/libs/arm64-v8a
@@ -138,13 +138,13 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Download universal AAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: libvlc4-universal
           path: package
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
