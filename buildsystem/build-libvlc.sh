@@ -263,6 +263,7 @@ avlc_pkgconfig()
     # Enforce pkg-config files coming from VLC contribs
     PKG_CONFIG_PATH="$VLC_CONTRIB/lib/pkgconfig/" \
     PKG_CONFIG_LIBDIR="$VLC_CONTRIB/lib/pkgconfig/" \
+    PKG_CONFIG_IGNORE_CONFLICTS=1 \
     pkg-config "$@"
 }
 
@@ -640,7 +641,7 @@ avlc_add_symbol_to_redefine() {
 
 # find and return the path of $2 inside $1
 avlc_find_lib() {
-    find $1 -name '$2'
+    find "$1" -name "$2"
 }
 
 # get all global symbols of a library and add them to SYMBOLS_TO_REDIFINE list
