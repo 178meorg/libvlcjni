@@ -120,8 +120,8 @@ cat > "$POM_FILE" <<EOF
   <artifactId>$ARTIFACT_ID</artifactId>
   <version>$VERSION</version>
   <packaging>aar</packaging>
-  <name>178me LibVLC 3 for Android</name>
-  <description>LibVLC 3 Android bindings built from the 178meorg VLC fork</description>
+  <name>178me LibVLC 4 for Android</name>
+  <description>LibVLC 4 Android bindings built from the 178meorg VLC fork</description>
   <url>https://github.com/178meorg/libvlcjni</url>
   <licenses>
     <license>

@@ -119,3 +119,46 @@ jobs:
           path: libvlc/build/outputs/aar/*.aar
           if-no-files-found: error
           retention-days: 14
+
+  publish-central:
+    name: publish-maven-central
+    if: startsWith(github.ref, 'refs/tags/libvlc-4.0.0-eap29-178me')
+    needs: package-aar
+    runs-on: ubuntu-24.04
+    env:
+      MAVEN_GROUP_ID: io.github.178meorg
+      MAVEN_ARTIFACT_ID: libvlc4-all
+      CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+      CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+
+    steps:
+      - name: Check out libvlcjni
+        uses: actions/checkout@v5
+
+      - name: Download universal AAR
+        uses: actions/download-artifact@v4
+        with:
+          name: libvlc4-universal
+          path: package
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Publish to Maven Central
+        shell: bash
+        run: |
+          set -euo pipefail
+          maven_version="${GITHUB_REF_NAME#libvlc-}"
+          configured_version="$(sed -n "s/^[[:space:]]*libvlcVersion = '\([^']*\)'.*/\1/p" build.gradle)"
+          test "$maven_version" = "$configured_version"
+          vlc_sha="$(sed -n 's/^VLC_TESTED_HASH=//p' buildsystem/get-vlc.sh)"
+          test -n "$vlc_sha"
+          ./buildsystem/maven/publish-central.sh \
+            --aar package \
+            --version "$maven_version" \
+            --vlc-revision "$vlc_sha"
