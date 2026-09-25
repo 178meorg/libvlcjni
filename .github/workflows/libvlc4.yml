@@ -1,0 +1,121 @@
+name: libvlc4
+
+on:
+  push:
+    tags:
+      - 'libvlc-4.0.0-eap29-178me*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: libvlc4-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-native:
+    name: native-${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    container:
+      image: registry.videolan.org/vlc-debian-android:20260611225331
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: armv7
+            arch: arm
+            abi_dir: armeabi-v7a
+          - name: arm64
+            arch: arm64
+            abi_dir: arm64-v8a
+
+    steps:
+      - name: Check out libvlcjni
+        uses: actions/checkout@v5
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch pinned VLC source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./buildsystem/get-vlc.sh
+
+      - name: Build native libraries
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          ABI_DIR: ${{ matrix.abi_dir }}
+        run: |
+          set -euxo pipefail
+          ./buildsystem/compile-libvlc.sh -a "$ARCH"
+          test -s "libvlc/jni/libs/$ABI_DIR/libvlc.so"
+          test -s "libvlc/jni/libs/$ABI_DIR/libvlcjni.so"
+          test -s "libvlc/jni/libs/$ABI_DIR/libc++_shared.so"
+
+      - name: Upload native libraries
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-${{ matrix.name }}
+          path: libvlc/jni/libs/${{ matrix.abi_dir }}/*.so
+          if-no-files-found: error
+          retention-days: 7
+
+  package-aar:
+    name: package-universal-aar
+    needs: build-native
+    runs-on: ubuntu-24.04
+    container:
+      image: registry.videolan.org/vlc-debian-android:20260611225331
+      options: --user root
+    env:
+      GRADLE_ABI: all
+
+    steps:
+      - name: Check out libvlcjni
+        uses: actions/checkout@v5
+
+      - name: Configure Git
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Fetch pinned VLC assets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./buildsystem/get-vlc.sh
+
+      - name: Download armv7 libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: native-armv7
+          path: libvlc/jni/libs/armeabi-v7a
+
+      - name: Download arm64 libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: native-arm64
+          path: libvlc/jni/libs/arm64-v8a
+
+      - name: Assemble universal AAR
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -s libvlc/jni/libs/armeabi-v7a/libvlcjni.so
+          test -s libvlc/jni/libs/arm64-v8a/libvlcjni.so
+          gradle assembleDebug --configuration-cache
+
+      - name: Upload universal AAR
+        uses: actions/upload-artifact@v6
+        with:
+          name: libvlc4-universal
+          path: libvlc/build/outputs/aar/*.aar
+          if-no-files-found: error
+          retention-days: 14
