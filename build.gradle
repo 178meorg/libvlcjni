@@ -22,7 +22,7 @@ allprojects {
 }
 
 ext {
-    libvlcVersion = '4.0.0-eap29-178me3'
+    libvlcVersion = '4.0.0-eap29-178me4'
     androidxLegacyVersion = '1.0.0'
     androidxAnnotationVersion = '1.3.0'
 }

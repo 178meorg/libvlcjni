@@ -43,7 +43,7 @@ check_patch_is_applied()
     fi
 }
 
-VLC_TESTED_HASH=aa2bc9cde11c21a3d53f3d9b56535a20b5793ce1
+VLC_TESTED_HASH=e8eb09ce549fd3b830723cfad0ef0cfe2adddcd3
 VLC_REPOSITORY=https://github.com/178meorg/vlc.git
 VLC_BRANCH=vlc4-migration
 APPLY_PATCHES=${VLC_APPLY_PATCHES:-0}
