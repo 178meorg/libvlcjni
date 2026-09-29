@@ -30,6 +30,12 @@ jobs:
           - name: arm64
             arch: arm64
             abi_dir: arm64-v8a
+          - name: x86
+            arch: x86
+            abi_dir: x86
+          - name: x86_64
+            arch: x86_64
+            abi_dir: x86_64
 
     steps:
       - name: Check out libvlcjni
@@ -104,12 +110,26 @@ jobs:
           name: native-arm64
           path: libvlc/jni/libs/arm64-v8a
 
+      - name: Download x86 libraries
+        uses: actions/download-artifact@v7
+        with:
+          name: native-x86
+          path: libvlc/jni/libs/x86
+
+      - name: Download x86_64 libraries
+        uses: actions/download-artifact@v7
+        with:
+          name: native-x86_64
+          path: libvlc/jni/libs/x86_64
+
       - name: Assemble universal AAR
         shell: bash
         run: |
           set -euxo pipefail
           test -s libvlc/jni/libs/armeabi-v7a/libvlcjni.so
           test -s libvlc/jni/libs/arm64-v8a/libvlcjni.so
+          test -s libvlc/jni/libs/x86/libvlcjni.so
+          test -s libvlc/jni/libs/x86_64/libvlcjni.so
           gradle assembleDebug --configuration-cache
 
       - name: Upload universal AAR
