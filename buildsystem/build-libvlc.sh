@@ -538,8 +538,16 @@ else
     # list packages to be built
     make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" list
 
-    make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" $MAKEFLAGS fetch
-    avlc_checkfail "contribs: make fetch failed"
+    fetch_attempt=1
+    while ! make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" $MAKEFLAGS fetch; do
+        if [ "$fetch_attempt" -ge 3 ]; then
+            echo "contribs: make fetch failed after $fetch_attempt attempts" >&2
+            exit 1
+        fi
+        echo "contribs: make fetch failed, retrying in 15 seconds ($fetch_attempt/3)" >&2
+        sleep 15
+        fetch_attempt=$((fetch_attempt + 1))
+    done
 
     #export the PATH
     # Make
