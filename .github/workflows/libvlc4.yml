@@ -90,7 +90,10 @@ jobs:
 
       - name: Configure Git
         shell: bash
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch pinned VLC assets
         shell: bash
