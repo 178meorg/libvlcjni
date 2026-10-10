@@ -1,0 +1,695 @@
+From aa2bc9cde11c21a3d53f3d9b56535a20b5793ce1 Mon Sep 17 00:00:00 2001
+Message-Id: <aa2bc9cde11c21a3d53f3d9b56535a20b5793ce1.1791611700.git.tonimayloneya@gmail.com>
+From: ice <tonimayloneya@gmail.com>
+Date: Fri, 25 Sep 2026 12:26:14 +0800
+Subject: [PATCH 7/8] codec: mediacodec: enable Dolby Vision on Android
+
+---
+ modules/codec/Makefile.am                    |   1 +
+ modules/codec/omxil/mediacodec.c             |  48 ++++--
+ modules/codec/omxil/mediacodec_jni.c         |  10 +-
+ modules/codec/omxil/mediacodec_profile.h     |  77 +++++++++
+ modules/demux/Makefile.am                    |   1 +
+ modules/demux/mkv/dolby_vision.hpp           |  48 ++++++
+ modules/demux/mkv/matroska_segment_parse.cpp |  32 ++++
+ modules/video_output/android/display.c       |   3 +-
+ modules/video_output/android/utils.c         |  16 ++
+ modules/video_output/android/utils.h         |   3 +
+ test/Makefile.am                             |   5 +
+ test/modules/codec/mediacodec_profile.c      | 169 +++++++++++++++++++
+ test/modules/demux/mkv_dolby_vision.cpp      |  49 ++++++
+ 13 files changed, 449 insertions(+), 13 deletions(-)
+ create mode 100644 modules/codec/omxil/mediacodec_profile.h
+ create mode 100644 modules/demux/mkv/dolby_vision.hpp
+ create mode 100644 test/modules/codec/mediacodec_profile.c
+ create mode 100644 test/modules/demux/mkv_dolby_vision.cpp
+
+diff --git a/modules/codec/Makefile.am b/modules/codec/Makefile.am
+index 46fd1b42e0..9f21022071 100644
+--- a/modules/codec/Makefile.am
++++ b/modules/codec/Makefile.am
+@@ -495,6 +495,7 @@ libomxil_plugin_la_LDFLAGS = $(AM_LDFLAGS) $(codec_RPATH)
+ 
+ libmediacodec_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)/codec/omxil
+ libmediacodec_plugin_la_SOURCES = codec/omxil/mediacodec.c codec/omxil/mediacodec.h \
++	codec/omxil/mediacodec_profile.h \
+ 	codec/omxil/mediacodec_jni.c codec/omxil/mediacodec_ndk.c codec/omxil/utils.c \
+ 	codec/omxil/omxil_utils.h codec/omxil/qcom.c codec/omxil/qcom.h
+ libmediacodec_plugin_la_LIBADD = libchroma_copy.la libvlc_hxxxhelper.la \
+diff --git a/modules/codec/omxil/mediacodec.c b/modules/codec/omxil/mediacodec.c
+index 4b8023d1e2..82c85720fb 100644
+--- a/modules/codec/omxil/mediacodec.c
++++ b/modules/codec/omxil/mediacodec.c
+@@ -196,6 +196,9 @@ static void ReleaseAllPictureContexts(decoder_sys_t *);
+ #define MEDIACODEC_AUDIO_LONGTEXT "Still experimental."
+ 
+ #define MEDIACODEC_TUNNELEDPLAYBACK_TEXT "Use a tunneled surface for playback"
++#define MEDIACODEC_IGNORE_PROFILE_TEXT "Decoders allowed to ignore profile checks"
++#define MEDIACODEC_IGNORE_PROFILE_LONGTEXT \
++    "Comma-separated decoder name patterns. '*' and '?' wildcards are supported."
+ 
+ #define CFG_PREFIX "mediacodec-"
+ 
+@@ -210,7 +213,10 @@ vlc_module_begin ()
+     add_bool(CFG_PREFIX "audio", false,
+              MEDIACODEC_AUDIO_TEXT, MEDIACODEC_AUDIO_LONGTEXT)
+     add_bool(CFG_PREFIX "tunneled-playback", false,
+-             MEDIACODEC_TUNNELEDPLAYBACK_TEXT, NULL)
++              MEDIACODEC_TUNNELEDPLAYBACK_TEXT, NULL)
++    add_string("decoder-ignore-profile", NULL,
++               MEDIACODEC_IGNORE_PROFILE_TEXT,
++               MEDIACODEC_IGNORE_PROFILE_LONGTEXT)
+     set_callbacks(OpenDecoderNdk, CloseDecoder)
+     add_shortcut("mediacodec_ndk")
+     add_submodule ()
+@@ -608,9 +614,23 @@ static int StartMediaCodec(decoder_t *p_dec)
+ 
+         args.video.p_surface = p_sys->video.p_surface;
+ 
+-        args.video.color.range = vlc_to_mc_color_range(p_dec->fmt_out.video.color_range);
+-        args.video.color.standard = vlc_to_mc_color_standard(p_dec->fmt_out.video.primaries, p_dec->fmt_out.video.space);
+-        args.video.color.transfer = vlc_to_mc_color_transfer(p_dec->fmt_out.video.transfer);
++        if (p_dec->fmt_in->i_codec == VLC_CODEC_HEVC &&
++            p_dec->fmt_in->video.dovi.rpu_present &&
++            p_dec->fmt_in->video.dovi.bl_present)
++        {
++            /* The vendor decoder determines final colorspace from the RPU. */
++            args.video.color.range = MC_COLOR_RANGE_UNSPECIFIED;
++            args.video.color.standard = MC_COLOR_STANDARD_UNSPECIFIED;
++            args.video.color.transfer = MC_COLOR_TRANSFER_UNSPECIFIED;
++            if (args.video.p_surface != NULL)
++                AndroidWindow_ClearDataSpace(args.video.p_surface);
++        }
++        else
++        {
++            args.video.color.range = vlc_to_mc_color_range(p_dec->fmt_out.video.color_range);
++            args.video.color.standard = vlc_to_mc_color_standard(p_dec->fmt_out.video.primaries, p_dec->fmt_out.video.space);
++            args.video.color.transfer = vlc_to_mc_color_transfer(p_dec->fmt_out.video.transfer);
++        }
+ 
+ 
+         args.video.b_tunneled_playback = args.video.p_surface ?
+@@ -1156,6 +1176,9 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+     int i_ret;
+     int i_profile = p_dec->fmt_in->i_profile;
+     const char *mime = NULL;
++    const bool b_dolby_vision = p_dec->fmt_in->i_codec == VLC_CODEC_HEVC &&
++        p_dec->fmt_in->video.dovi.rpu_present &&
++        p_dec->fmt_in->video.dovi.bl_present;
+ 
+     /* Video or Audio if "mediacodec-audio" bool is true */
+     if (p_dec->fmt_in->i_cat != VIDEO_ES && (p_dec->fmt_in->i_cat != AUDIO_ES
+@@ -1182,7 +1205,7 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+                 if (hevc_get_profile_level(p_dec->fmt_in, &i_hevc_profile, NULL, NULL))
+                     i_profile = i_hevc_profile;
+             }
+-            mime = "video/hevc";
++            mime = b_dolby_vision ? "video/dolby-vision" : "video/hevc";
+             break;
+         case VLC_CODEC_H264:
+             if (i_profile == -1)
+@@ -1262,7 +1285,8 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+         free(p_sys);
+         return VLC_EGENERIC;
+     }
+-    if (p_sys->api.prepare(&p_sys->api, i_profile) != 0)
++    /* The HEVC base layer profile is not an Android Dolby Vision profile. */
++    if (p_sys->api.prepare(&p_sys->api, b_dolby_vision ? -1 : i_profile) != 0)
+     {
+         /* If the device can't handle video/wvc1,
+          * it can probably handle video/x-ms-wmv */
+@@ -1630,19 +1654,23 @@ static int Video_ProcessOutput(decoder_t *p_dec, mc_api_out *p_out,
+                 p_out->conf.video.crop_right, p_out->conf.video.crop_bottom);
+ 
+         /* Only use MediaCodec output as fallback when container/input is unspecified */
+-        if (p_dec->fmt_out.video.primaries == COLOR_PRIMARIES_UNDEF)
++        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++            p_dec->fmt_out.video.primaries == COLOR_PRIMARIES_UNDEF)
+             p_dec->fmt_out.video.primaries =
+                 mc_to_vlc_primaries(p_out->conf.video.color.standard);
+ 
+-        if (p_dec->fmt_out.video.space == COLOR_SPACE_UNDEF)
++        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++            p_dec->fmt_out.video.space == COLOR_SPACE_UNDEF)
+             p_dec->fmt_out.video.space =
+                  mc_to_vlc_color_space(p_out->conf.video.color.standard);
+ 
+-        if (p_dec->fmt_out.video.transfer == TRANSFER_FUNC_UNDEF)
++        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++            p_dec->fmt_out.video.transfer == TRANSFER_FUNC_UNDEF)
+             p_dec->fmt_out.video.transfer =
+                 mc_to_vlc_color_transfer(p_out->conf.video.color.transfer);
+ 
+-        if (p_dec->fmt_out.video.color_range == COLOR_RANGE_UNDEF)
++        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++            p_dec->fmt_out.video.color_range == COLOR_RANGE_UNDEF)
+             p_dec->fmt_out.video.color_range =
+                 mc_to_vlc_color_range(p_out->conf.video.color.range);
+ 
+diff --git a/modules/codec/omxil/mediacodec_jni.c b/modules/codec/omxil/mediacodec_jni.c
+index 5be03b6c3e..fb48cafd68 100644
+--- a/modules/codec/omxil/mediacodec_jni.c
++++ b/modules/codec/omxil/mediacodec_jni.c
+@@ -37,6 +37,7 @@
+ #include "omxil_utils.h"
+ 
+ #include "mediacodec.h"
++#include "mediacodec_profile.h"
+ #include "../../video_output/android/env.h"
+ 
+ char* MediaCodec_GetName(vlc_object_t *p_obj, vlc_fourcc_t codec,
+@@ -327,10 +328,15 @@ char* MediaCodec_GetName(vlc_object_t *p_obj, vlc_fourcc_t codec,
+             jobject type = (*env)->GetObjectArrayElement(env, types, j);
+             if (!jstrcmp(env, type, psz_mime))
+             {
++                char *ignore_names = var_InheritString(p_obj,
++                                                       "decoder-ignore-profile");
++                bool ignore_profile = MediaCodec_MatchDecoderList(
++                    ignore_names, name_ptr, name_len, false);
++                free(ignore_names);
+                 /* The mime type is matching for this component. We
+                    now check if the capabilities of the codec is
+                    matching the video format. */
+-                if (profile > 0)
++                if (profile > 0 && !ignore_profile)
+                 {
+                     /* This decoder doesn't expose its profiles and is high
+                      * profile capable */
+@@ -417,4 +423,4 @@ loopclean:
+     (*env)->DeleteLocalRef(env, jmime);
+ 
+     return psz_name;
+-}
+\ No newline at end of file
++}
+diff --git a/modules/codec/omxil/mediacodec_profile.h b/modules/codec/omxil/mediacodec_profile.h
+new file mode 100644
+index 0000000000..691712f50b
+--- /dev/null
++++ b/modules/codec/omxil/mediacodec_profile.h
+@@ -0,0 +1,77 @@
++/* Copyright (C) 2026 VLC authors and VideoLAN
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++#ifndef VLC_MEDIACODEC_PROFILE_H
++#define VLC_MEDIACODEC_PROFILE_H
++
++#include <vlc_common.h>
++#include <vlc_strings.h>
++
++/* Decoder names use glob patterns, not regular expressions. Keep the legacy
++ * Dolby Vision option case-insensitive; decoder-ignore-profile is case-sensitive.
++ */
++static inline bool
++MediaCodec_MatchDecoderPattern(const char *pattern, size_t pattern_len,
++                              const char *name, size_t name_len,
++                              bool ignore_case)
++{
++    size_t p = 0, n = 0, star = SIZE_MAX, retry = 0;
++
++    while (n < name_len)
++    {
++        if (p < pattern_len && pattern[p] == '*')
++        {
++            star = p++;
++            retry = n;
++        }
++        else if (p < pattern_len &&
++                 (pattern[p] == '?' || pattern[p] == name[n] ||
++                  (ignore_case && vlc_ascii_tolower(pattern[p]) ==
++                                  vlc_ascii_tolower(name[n]))))
++        {
++            p++;
++            n++;
++        }
++        else if (star != SIZE_MAX)
++        {
++            p = star + 1;
++            n = ++retry;
++        }
++        else
++            return false;
++    }
++    while (p < pattern_len && pattern[p] == '*')
++        p++;
++    return p == pattern_len;
++}
++
++static inline bool
++MediaCodec_MatchDecoderList(const char *patterns, const char *name,
++                           size_t name_len, bool ignore_case)
++{
++    if (patterns == NULL)
++        return false;
++
++    for (const char *pattern = patterns; pattern != NULL; )
++    {
++        const char *next = strchr(pattern, ',');
++        size_t len = next != NULL ? (size_t)(next - pattern) : strlen(pattern);
++
++        while (len > 0 && (*pattern == ' ' || *pattern == '\t'))
++        {
++            pattern++;
++            len--;
++        }
++        while (len > 0 && (pattern[len - 1] == ' ' ||
++                           pattern[len - 1] == '\t'))
++            len--;
++
++        if (len > 0 && MediaCodec_MatchDecoderPattern(pattern, len, name,
++                                                     name_len, ignore_case))
++            return true;
++        pattern = next != NULL ? next + 1 : NULL;
++    }
++    return false;
++}
++
++#endif /* VLC_MEDIACODEC_PROFILE_H */
+diff --git a/modules/demux/Makefile.am b/modules/demux/Makefile.am
+index 46ab71ee40..3224b6b90b 100644
+--- a/modules/demux/Makefile.am
++++ b/modules/demux/Makefile.am
+@@ -193,6 +193,7 @@ libmkv_plugin_la_SOURCES = \
+ 	demux/mkv/virtual_segment.hpp demux/mkv/virtual_segment.cpp \
+ 	demux/mkv/matroska_segment.hpp demux/mkv/matroska_segment.cpp \
+ 	demux/mkv/matroska_segment_parse.cpp \
++	demux/mkv/dolby_vision.hpp \
+ 	demux/mkv/matroska_segment_seeker.hpp demux/mkv/matroska_segment_seeker.cpp \
+ 	demux/mkv/demux.hpp demux/mkv/demux.cpp \
+ 	demux/mkv/events.hpp demux/mkv/events.cpp \
+diff --git a/modules/demux/mkv/dolby_vision.hpp b/modules/demux/mkv/dolby_vision.hpp
+new file mode 100644
+index 0000000000..12b8678d6c
+--- /dev/null
++++ b/modules/demux/mkv/dolby_vision.hpp
+@@ -0,0 +1,48 @@
++/* Dolby Vision configuration in Matroska BlockAdditionMapping.
++ * Copyright (C) 2026 VLC authors and VideoLAN
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++#ifndef VLC_MKV_DOLBY_VISION_HPP
++#define VLC_MKV_DOLBY_VISION_HPP
++
++#include <cstddef>
++#include <cstdint>
++
++namespace mkv {
++
++struct DolbyVisionConfig
++{
++    unsigned profile;
++    unsigned level;
++    unsigned compatibility;
++    bool enhancement_layer;
++};
++
++/* BlockAddIDType is a big-endian integer, not a VLC_FOURCC value.
++ * Only recognize HEVC profiles with an in-band base layer and RPU.
++ * Keep CodecPrivate as hvcC: the Dolby record is not HEVC extradata. */
++inline bool ParseDolbyVisionConfig(uint64_t type, const uint8_t *data,
++                                  size_t size, DolbyVisionConfig &config)
++{
++    if ((type != 0x64766343 && type != 0x64767643) ||
++        data == nullptr || size < 4 || data[0] != 1)
++        return false;
++
++    unsigned profile = data[2] >> 1;
++    if (profile != 4 && profile != 5 && profile != 7 && profile != 8)
++        return false;
++    if ((profile < 8) != (type == 0x64766343))
++        return false;
++    if ((data[3] & 0x05) != 0x05) /* rpu_present_flag + bl_present_flag */
++        return false;
++
++    config.profile = profile;
++    config.level = ((data[2] & 1) << 5) | (data[3] >> 3);
++    config.compatibility = size >= 5 ? data[4] >> 4 : 0;
++    config.enhancement_layer = (data[3] & 2) != 0;
++    return true;
++}
++
++} // namespace mkv
++
++#endif
+diff --git a/modules/demux/mkv/matroska_segment_parse.cpp b/modules/demux/mkv/matroska_segment_parse.cpp
+index d13fe61074..ab2c844437 100644
+--- a/modules/demux/mkv/matroska_segment_parse.cpp
++++ b/modules/demux/mkv/matroska_segment_parse.cpp
+@@ -29,6 +29,7 @@
+ #include "string_dispatcher.hpp"
+ #include "util.hpp"
+ #include "chapter_command_script.hpp"
++#include "dolby_vision.hpp"
+ 
+ extern "C" {
+ #include "../vobsub.h"
+@@ -1144,6 +1145,37 @@ void matroska_segment_c::ParseTrackEntry( const KaxTrackEntry *m )
+             return;
+         }
+ 
++#if LIBMATROSKA_VERSION >= 0x010600
++        if( p_track->fmt.i_cat == VIDEO_ES &&
++            p_track->fmt.i_codec == VLC_CODEC_HEVC )
++        {
++            for( const auto *element : *m )
++            {
++                if( !MKV_IS_ID(element, KaxBlockAdditionMapping) )
++                    continue;
++                const auto &mapping =
++                    *static_cast<const KaxBlockAdditionMapping *>(element);
++                const auto *type = FindChild<const KaxBlockAddIDType>(mapping);
++                const auto *extra = FindChild<const KaxBlockAddIDExtraData>(mapping);
++                mkv::DolbyVisionConfig config;
++                if( !type || !extra || !mkv::ParseDolbyVisionConfig(
++                        static_cast<uint64>(*type), extra->GetBuffer(),
++                        extra->GetSize(), config) )
++                    continue;
++
++                p_track->fmt.i_original_fourcc = VLC_FOURCC('d','v','h','e');
++                p_track->fmt.video.dovi.version_major = 1;
++                p_track->fmt.video.dovi.version_minor = 0;
++                p_track->fmt.video.dovi.profile = config.profile;
++                p_track->fmt.video.dovi.level = config.level;
++                p_track->fmt.video.dovi.rpu_present = true;
++                p_track->fmt.video.dovi.bl_present = true;
++                p_track->fmt.video.dovi.el_present = config.enhancement_layer;
++                break;
++            }
++        }
++#endif
++
+         tracks.insert( std::make_pair( p_track->i_number, std::unique_ptr<mkv_track_t>(p_track) ) ); // TODO: add warning if two tracks have the same key
+     }
+     else
+diff --git a/modules/video_output/android/display.c b/modules/video_output/android/display.c
+index ca50379bd7..6fb44185b0 100644
+--- a/modules/video_output/android/display.c
++++ b/modules/video_output/android/display.c
+@@ -673,7 +673,8 @@ static int CreateSurfaceControl(vout_display_t *vd)
+ 
+     /* Set colorspace */
+     int32_t dataspace = video_format_to_adataspace(vd->source);
+-    if (dataspace != ADATASPACE_UNKNOWN)
++    if (dataspace != ADATASPACE_UNKNOWN &&
++        !(vd->source->dovi.rpu_present && vd->source->dovi.bl_present))
+         asc_api->ASurfaceTransaction.setBufferDataSpace(txn, sc, dataspace);
+ 
+     asc_api->ASurfaceTransaction.apply(txn);
+diff --git a/modules/video_output/android/utils.c b/modules/video_output/android/utils.c
+index ef277c1dce..17822c9a59 100644
+--- a/modules/video_output/android/utils.c
++++ b/modules/video_output/android/utils.c
+@@ -34,6 +34,22 @@
+ #include <pthread.h>
+ #include <assert.h>
+ 
++int AndroidWindow_ClearDataSpace(ANativeWindow *window)
++{
++    if (window == NULL)
++        return -1;
++
++    void *library = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
++    if (library == NULL)
++        return -1;
++
++    int32_t (*set_dataspace)(ANativeWindow *, int32_t) =
++        dlsym(library, "ANativeWindow_setBuffersDataSpace");
++    int ret = set_dataspace != NULL ? set_dataspace(window, ADATASPACE_UNKNOWN) : -1;
++    dlclose(library);
++    return ret;
++}
++
+ #include <EGL/egl.h>
+ #include <GLES2/gl2.h>
+ #include <GLES2/gl2ext.h>
+diff --git a/modules/video_output/android/utils.h b/modules/video_output/android/utils.h
+index 877e935628..e82b8796d3 100644
+--- a/modules/video_output/android/utils.h
++++ b/modules/video_output/android/utils.h
+@@ -46,6 +46,9 @@
+ /* AWH backed by a Android SurfaceView */
+ #define AWH_CAPS_SURFACE_VIEW 0x2
+ 
++/* Clear a producer-side dataspace override before starting a Dolby decoder. */
++int AndroidWindow_ClearDataSpace(ANativeWindow *window);
++
+ /*
+  * AImageReader function pointers
+  */
+diff --git a/test/Makefile.am b/test/Makefile.am
+index 613cfab72d..5b056cf008 100644
+--- a/test/Makefile.am
++++ b/test/Makefile.am
+@@ -79,8 +79,10 @@ check_PROGRAMS = \
+ 	test_modules_codec_hxxx_helper \
+ 	test_modules_codec_cea708_aspect_ratio \
+ 	test_modules_codec_cea708_integration \
++	test_modules_codec_mediacodec_profile \
+ 	test_modules_keystore \
+ 	test_modules_demux_libmp4 \
++	test_modules_demux_mkv_dolby_vision \
+ 	test_modules_demux_timestamps \
+ 	test_modules_demux_timestamps_filter \
+ 	test_modules_demux_ts_pes \
+@@ -349,6 +351,9 @@ test_modules_packetizer_mpegvideo_SOURCES = modules/packetizer/mpegvideo.c \
+ 				modules/packetizer/packetizer.h
+ test_modules_packetizer_mpegvideo_LDADD = $(LIBVLCCORE) $(LIBVLC)
+ test_modules_keystore_SOURCES = modules/keystore/test.c
++test_modules_codec_mediacodec_profile_SOURCES = modules/codec/mediacodec_profile.c
++test_modules_codec_mediacodec_profile_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)/../include
++test_modules_demux_mkv_dolby_vision_SOURCES = modules/demux/mkv_dolby_vision.cpp
+ test_modules_keystore_LDADD = $(LIBVLCCORE) $(LIBVLC)
+ test_modules_tls_SOURCES = modules/misc/tls.c
+ test_modules_tls_LDADD = $(LIBVLCCORE) $(LIBVLC)
+diff --git a/test/modules/codec/mediacodec_profile.c b/test/modules/codec/mediacodec_profile.c
+new file mode 100644
+index 0000000000..4cbe9915e3
+--- /dev/null
++++ b/test/modules/codec/mediacodec_profile.c
+@@ -0,0 +1,169 @@
++/* Copyright (C) 2026 VLC authors and VideoLAN
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++#ifdef HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#undef NDEBUG
++#include <assert.h>
++
++#include "../../../modules/codec/omxil/mediacodec_profile.h"
++
++static void TestPatterns(void)
++{
++    static const struct
++    {
++        const char *pattern;
++        const char *name;
++        bool ignore_case;
++        bool matches;
++    } cases[] = {
++        { "", "", false, true },
++        { "", "OMX.vendor.hevc", false, false },
++        { "*", "", false, true },
++        { "**", "", false, true },
++        { "?", "", false, false },
++        { "*?", "", false, false },
++        { "*", "OMX.vendor.hevc", false, true },
++        { "OMX.vendor.hevc", "OMX.vendor.hevc", false, true },
++        { "OMX.vendor.hevc", "OMX.vendor.avc", false, false },
++        { "OMX.vendor.hevc", "OMX.vendor.hevc.extra", false, false },
++        { "OMX.vendor.hevc.extra", "OMX.vendor.hevc", false, false },
++        { "OMX.*", "OMX.vendor.hevc", false, true },
++        { "*.hevc", "OMX.vendor.hevc", false, true },
++        { "OMX.*.hevc", "OMX.vendor.hevc", false, true },
++        { "OMX.*.hevc", "OMX..hevc", false, true },
++        { "OMX.*.hevc", "c2.vendor.hevc", false, false },
++        { "OMX.?.hevc", "OMX.a.hevc", false, true },
++        { "OMX.?.hevc", "OMX.ab.hevc", false, false },
++        { "OMX.?.hevc", "OMX..hevc", false, false },
++        { "OMX.??.hevc", "OMX.ab.hevc", false, true },
++        { "OMX.*hevc", "OMX.hevchevchevc", false, true },
++        { "OMX.*hevc", "OMX.hevchevchevcx", false, false },
++        { "*ab*cd", "ababcabcd", false, true },
++        { "*ab*cd", "ababcabcdx", false, false },
++        { "*a*b?c*", "zaaabxcend", false, true },
++        { "**OMX.***.hevc**", "OMX.vendor.hevc", false, true },
++        { "*a", "*ba", false, true },
++        { "*?*?*", "ab", false, true },
++        { "*?*?*", "a", false, false },
++        { "omx.vendor.hevc", "OMX.vendor.hevc", false, false },
++        { "omx.vendor.hevc", "OMX.vendor.hevc", true, true },
++        { "OMX.*.HEVC", "omx.vendor.hevc", false, false },
++        { "OMX.*.HEVC", "omx.vendor.hevc", true, true },
++        /* These are glob patterns, not regular expressions. */
++        { "^OMX.*", "OMX.vendor.hevc", false, false },
++        { "OMX.[ab].hevc", "OMX.a.hevc", false, false },
++        { "OMX.[ab].hevc", "OMX.[ab].hevc", false, true },
++    };
++
++    for (size_t i = 0; i < ARRAY_SIZE(cases); ++i)
++        assert(MediaCodec_MatchDecoderPattern(cases[i].pattern,
++                   strlen(cases[i].pattern), cases[i].name,
++                   strlen(cases[i].name), cases[i].ignore_case)
++               == cases[i].matches);
++}
++
++static void TestLists(void)
++{
++    static const struct
++    {
++        const char *patterns;
++        const char *name;
++        bool ignore_case;
++        bool matches;
++    } cases[] = {
++        { NULL, "OMX.vendor.hevc", false, false },
++        { "", "OMX.vendor.hevc", false, false },
++        { ",,,", "OMX.vendor.hevc", false, false },
++        { " \t, ,\t,", "OMX.vendor.hevc", false, false },
++        { NULL, "", false, false },
++        { "", "", false, false },
++        { ",,", "", false, false },
++        { "*", "", false, true },
++        { "?", "", false, false },
++        { "OMX.vendor.hevc", "OMX.vendor.hevc", false, true },
++        { "OMX.vendor.avc", "OMX.vendor.hevc", false, false },
++        { "OMX.vendor.avc,OMX.vendor.hevc", "OMX.vendor.hevc", false, true },
++        { "OMX.vendor.hevc,OMX.vendor.avc", "OMX.vendor.hevc", false, true },
++        { "OMX.vendor.avc,c2.vendor.hevc", "OMX.vendor.hevc", false, false },
++        { ",,OMX.vendor.hevc,,", "OMX.vendor.hevc", false, true },
++        { " \tOMX.*.hevc\t ", "OMX.vendor.hevc", false, true },
++        { "x, \tOMX.*.hevc\t , y", "OMX.vendor.hevc", false, true },
++        { "x, * ,y", "OMX.vendor.hevc", false, true },
++        { "OMX. vendor.hevc", "OMX.vendor.hevc", false, false },
++        { "OMX.VENDOR.HEVC", "OMX.vendor.hevc", false, false },
++        { "OMX.VENDOR.HEVC", "OMX.vendor.hevc", true, true },
++    };
++
++    for (size_t i = 0; i < ARRAY_SIZE(cases); ++i)
++        assert(MediaCodec_MatchDecoderList(cases[i].patterns, cases[i].name,
++                   strlen(cases[i].name), cases[i].ignore_case)
++               == cases[i].matches);
++}
++
++static void TestBoundedBuffers(void)
++{
++    /* JNI decoder names and pattern slices need not be NUL-terminated. */
++    const char name[] = { 'O', 'M', 'X', '.', 'a' };
++    const char pattern[] = { 'O', 'M', 'X', '.', '?' };
++    assert(MediaCodec_MatchDecoderPattern(pattern, sizeof(pattern),
++                                         name, sizeof(name), false));
++    assert(MediaCodec_MatchDecoderList("OMX.?", name, sizeof(name), false));
++    assert(!MediaCodec_MatchDecoderList("OMX.??", name, sizeof(name), false));
++    assert(MediaCodec_MatchDecoderPattern("OMX.*ignored", 5,
++                                         name, sizeof(name), false));
++    assert(MediaCodec_MatchDecoderList("OMX.*", "OMX.aignored", 5, false));
++
++    char long_name[4096];
++    char long_pattern[sizeof(long_name) + 2];
++    memset(long_name, 'a', sizeof(long_name));
++    memset(long_pattern, 'a', sizeof(long_pattern));
++    long_pattern[sizeof(long_name)] = '\0';
++    assert(MediaCodec_MatchDecoderPattern(long_pattern, sizeof(long_name),
++                                         long_name, sizeof(long_name), false));
++    assert(MediaCodec_MatchDecoderList(long_pattern, long_name,
++                                      sizeof(long_name), false));
++    assert(!MediaCodec_MatchDecoderList(long_pattern, long_name,
++                                       sizeof(long_name) - 1, false));
++
++    /* Exercise retry at the end of a long name, including a failed suffix. */
++    long_pattern[0] = '*';
++    long_pattern[sizeof(long_name) - 1] = 'b';
++    long_pattern[sizeof(long_name)] = '*';
++    long_pattern[sizeof(long_name) + 1] = '\0';
++    assert(!MediaCodec_MatchDecoderList(long_pattern, long_name,
++                                       sizeof(long_name), false));
++    long_name[sizeof(long_name) - 1] = 'b';
++    assert(MediaCodec_MatchDecoderList(long_pattern, long_name,
++                                      sizeof(long_name), false));
++}
++
++static void TestDolbyDefaults(void)
++{
++    const char *patterns =
++        "*dolby.decoder.hevc,OMX.realtek.video.dec.dvhe.stn";
++    const char *names[] = {
++        "OMX.vendor.dolby.decoder.hevc",
++        "c2.vendor.dolby.decoder.hevc",
++        "OMX.realtek.video.dec.dvhe.stn",
++        "omx.REALTEK.video.dec.DVHE.stn",
++    };
++    for (size_t i = 0; i < ARRAY_SIZE(names); ++i)
++        assert(MediaCodec_MatchDecoderList(patterns, names[i],
++                                          strlen(names[i]), true));
++    assert(!MediaCodec_MatchDecoderList(patterns, "OMX.vendor.hevc",
++                                       strlen("OMX.vendor.hevc"), true));
++    assert(!MediaCodec_MatchDecoderList(patterns, "OMX.dolby.decoder.hevc.extra",
++                         strlen("OMX.dolby.decoder.hevc.extra"), true));
++}
++
++int main(void)
++{
++    TestPatterns();
++    TestLists();
++    TestBoundedBuffers();
++    TestDolbyDefaults();
++    return 0;
++}
+diff --git a/test/modules/demux/mkv_dolby_vision.cpp b/test/modules/demux/mkv_dolby_vision.cpp
+new file mode 100644
+index 0000000000..f1092ae77e
+--- /dev/null
++++ b/test/modules/demux/mkv_dolby_vision.cpp
+@@ -0,0 +1,49 @@
++/* Copyright (C) 2026 VLC authors and VideoLAN
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++#undef NDEBUG
++#include <cassert>
++#include "../../../modules/demux/mkv/dolby_vision.hpp"
++
++int main()
++{
++    mkv::DolbyVisionConfig config;
++    const uint64_t dvcc = 0x64766343, dvvc = 0x64767643;
++    const uint8_t p4[] = { 1, 0, 0x08, 0x37, 0 };
++    const uint8_t p5[] = { 1, 0, 0x0a, 0x35, 0 };
++    const uint8_t p7[] = { 1, 0, 0x0e, 0x37, 0x10 };
++    const uint8_t p8[] = { 1, 0, 0x10, 0x35, 0x10 };
++    assert(mkv::ParseDolbyVisionConfig(dvcc, p4, sizeof(p4), config));
++    assert(config.profile == 4 && config.enhancement_layer);
++    assert(mkv::ParseDolbyVisionConfig(dvcc, p5, sizeof(p5), config));
++    assert(config.profile == 5 && config.level == 6 &&
++           config.compatibility == 0 && !config.enhancement_layer);
++    assert(mkv::ParseDolbyVisionConfig(dvcc, p7, sizeof(p7), config));
++    assert(config.profile == 7 && config.enhancement_layer);
++    assert(mkv::ParseDolbyVisionConfig(dvvc, p8, sizeof(p8), config));
++    assert(config.profile == 8 && config.compatibility == 1);
++    assert(mkv::ParseDolbyVisionConfig(dvcc, p5, 4, config));
++    assert(config.compatibility == 0);
++    for (size_t n = 0; n < 4; ++n)
++        assert(!mkv::ParseDolbyVisionConfig(dvcc, p5, n, config));
++    assert(!mkv::ParseDolbyVisionConfig(dvcc, nullptr, 24, config));
++    assert(!mkv::ParseDolbyVisionConfig(0x43766364, p5, 5, config));
++    assert(!mkv::ParseDolbyVisionConfig(dvvc, p5, 5, config));
++    assert(!mkv::ParseDolbyVisionConfig(dvcc, p8, 5, config));
++    const uint8_t high_level[] = { 1, 0, 0x11, 0xfd, 0xf0 };
++    assert(mkv::ParseDolbyVisionConfig(dvvc, high_level,
++                                      sizeof(high_level), config));
++    assert(config.profile == 8 && config.level == 63 &&
++           config.compatibility == 15 && !config.enhancement_layer);
++    uint8_t invalid[] = { 1, 0, 0x0a, 0x35, 0 };
++    invalid[3] &= ~4; // no RPU
++    assert(!mkv::ParseDolbyVisionConfig(dvcc, invalid, 5, config));
++    invalid[3] = 0x34; // no base layer
++    assert(!mkv::ParseDolbyVisionConfig(dvcc, invalid, 5, config));
++    invalid[3] = 0x35;
++    invalid[2] = 18; // AVC profile 9
++    assert(!mkv::ParseDolbyVisionConfig(dvvc, invalid, 5, config));
++    invalid[2] = 0x0a;
++    invalid[0] = 2; // unknown configuration version
++    assert(!mkv::ParseDolbyVisionConfig(dvcc, invalid, 5, config));
++}
+-- 
+2.56.0

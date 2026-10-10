@@ -1,0 +1,2194 @@
+From e8eb09ce549fd3b830723cfad0ef0cfe2adddcd3 Mon Sep 17 00:00:00 2001
+Message-Id: <e8eb09ce549fd3b830723cfad0ef0cfe2adddcd3.1791611700.git.tonimayloneya@gmail.com>
+In-Reply-To: <aa2bc9cde11c21a3d53f3d9b56535a20b5793ce1.1791611700.git.tonimayloneya@gmail.com>
+References: <aa2bc9cde11c21a3d53f3d9b56535a20b5793ce1.1791611700.git.tonimayloneya@gmail.com>
+From: ice <tonimayloneya@gmail.com>
+Date: Sat, 26 Sep 2026 15:47:07 +0800
+Subject: [PATCH 8/8] codec: mediacodec: retry ranked decoder candidates
+
+Rank mixed Dolby Vision and HEVC candidates, reject negative scores, and relax profile filtering when no eligible candidate remains. Keep the component blacklist and separate failure records for each MIME/name pair.
+
+Retry startup and runtime failures with safe decoder retirement, and fall back to other modules after candidate exhaustion. Add selection, failure and allocation regression tests and document the policy.
+
+Validated host candidate tests with ASan/UBSan, MediaCodec profile and MKV Dolby tests, and Android ARM64 module/test cross-compilation. Device playback validation remains pending.
+---
+ doc/Makefile.am                             |   1 +
+ doc/mediacodec-retry.md                     |  90 ++++
+ modules/codec/Makefile.am                   |   2 +-
+ modules/codec/omxil/mediacodec.c            | 360 +++++++++++-----
+ modules/codec/omxil/mediacodec.h            |   8 +-
+ modules/codec/omxil/mediacodec_candidates.h | 315 ++++++++++++++
+ modules/codec/omxil/mediacodec_jni.c        | 363 +++++++++-------
+ modules/codec/omxil/mediacodec_ndk.c        |  23 +-
+ test/Makefile.am                            |   5 +
+ test/modules/codec/mediacodec_candidates.c  | 440 ++++++++++++++++++++
+ 10 files changed, 1351 insertions(+), 256 deletions(-)
+ create mode 100644 doc/mediacodec-retry.md
+ create mode 100644 modules/codec/omxil/mediacodec_candidates.h
+ create mode 100644 test/modules/codec/mediacodec_candidates.c
+
+diff --git a/doc/Makefile.am b/doc/Makefile.am
+index 8ab05fa929..3085a4758d 100644
+--- a/doc/Makefile.am
++++ b/doc/Makefile.am
+@@ -74,6 +74,7 @@ man1_MANS = \
+ 	   vlc-wrapper.1
+ 
+ EXTRA_DIST = \
++	mediacodec-retry.md \
+ 	$(CHANGELOGS) \
+ 	$(man1_MANS) \
+ 	$(LIBVLC_SAMPLES) \
+diff --git a/doc/mediacodec-retry.md b/doc/mediacodec-retry.md
+new file mode 100644
+index 0000000000..a1be244391
+--- /dev/null
++++ b/doc/mediacodec-retry.md
+@@ -0,0 +1,90 @@
++# Android MediaCodec candidate retry
++
++Video decoding tries compatible MediaCodec components in a stable, configurable
++order. Startup failures advance to another component. Runtime codec failures
++request a decoder-module reload, retaining the failed MIME/name combinations on
++the current decoder object. Seeking does not clear this history; a new decoder
++object starts with an empty history. When candidates are exhausted, normal VLC
++module selection can fall back to software decoding, subject to the application's
++existing codec configuration.
++
++## Options
++
++- `mediacodec-retry` (boolean, default true): enable startup and runtime retries.
++  `--no-mediacodec-retry` selects only the first candidate and retains the legacy
++  failure behavior, including no new Dolby-to-HEVC fallback. Candidate scoring
++  and profile relaxation during initial selection still apply.
++- `decoder-score-list` (string, default empty): comma-separated
++  `POSIX-extended-regex=integer` rules, case-sensitive. The first matching rule
++  determines a candidate's score. Unmatched candidates score 100. Negative
++  scores disable a component before any MIME bonus is added; higher totals
++  win, and equal totals retain collection order. Invalid entries are
++  ignored with a warning. Patterns cannot contain commas; the last `=` in each
++  entry separates the pattern from the score. For example:
++
++  ```text
++  --decoder-score-list=^c2\.vendor\.=200,^OMX\.bad\.=-1
++  ```
++
++  Scores do not override the component blacklist or the profile selection pass.
++  `decoder-ignore-profile` continues to use its existing glob syntax.
++- `mediacodec-fake-dolby-fail` (boolean, default false): simulate failure before
++  configuring a Dolby Vision component, to exercise base HEVC fallback.
++
++With retry enabled, Dolby Vision and base HEVC candidates share one sorted pool.
++Dolby components that also declare HEVC support receive a bonus of 500; other
++Dolby components receive 400; HEVC candidates receive no bonus. These three
++groups are collected in that order, retaining Android enumeration order within
++each group when totals tie. Scores can therefore put a base HEVC component ahead
++of a Dolby component. Totals use 64-bit arithmetic.
++
++Candidates are deduplicated by MIME/name, keeping the higher-scoring entry (the
++first entry on ties). A component supporting both MIME types can be tried once
++for each. There is no fixed candidate-count limit. The default blacklist remains
++active even with custom scores. These are intentional differences from the
++reference APK's name-only deduplication, 16-entry limit and configurable blacklist.
++
++Video selection first collects the entire pool with the requested profiles. If
++no eligible candidates remain, positive profiles are replaced by -1 for one
++additional enumeration pass. Dolby requests already use -1 because the HEVC
++base profile is not an Android Dolby profile. Blacklists, negative scores and
++failed MIME/name records remain active in both passes. Enumeration errors abort
++selection without returning a partial pool or triggering profile relaxation.
++This only relaxes selection: input metadata and decoder configuration are not
++rewritten. VC-1 keeps its existing MIME fallback before relaxing the final MIME.
++
++HEVC candidates use ordinary color configuration and output metadata without
++Dolby flags. This is a best-effort base-layer
++fallback, not Dolby Vision color conversion; not all Dolby profiles produce a
++correct picture without a Dolby decoder.
++
++Runtime recovery does not seek backwards or replay already-consumed input. It
++can lose frames and may need the next random-access frame to resume output.
++Allocation/bitstream failures are not a reason to try every hardware component.
++The audio MediaCodec option remains experimental and does not gain retries.
++
++## Validation
++
++`test_modules_codec_mediacodec_candidates` covers rule parsing, negative-score
++exclusion, mixed-MIME bonuses, stable ordering, overflow, duplicate candidates,
++MIME-specific exclusions and exhaustion across reloads. An injected enumerator
++exercises the production selection loop, including whole-pool profile relaxation,
++enumeration errors and allocation failures without leaking partial selections.
++Existing MediaCodec profile and MKV Dolby tests should also
++pass. The candidate test can be run on a POSIX host without an Android device:
++
++```sh
++cc -std=gnu11 -Wall -Wextra -Werror \
++  test/modules/codec/mediacodec_candidates.c -o /tmp/test_mediacodec_candidates
++/tmp/test_mediacodec_candidates
++```
++
++Device validation must additionally exercise both AImageReader and legacy
++Surface output. Check H.264/HEVC normal playback; Dolby playback with and without
++the fake failure option; startup create/configure/start failures; input/output
++queue and codec-restart failures before and after the first picture; exhaustion
++with software fallback; retry disabled; and pause, seek and stop during recovery.
++Observe candidate name/MIME/score and failure-stage logs. Verify old codecs are
++released before replacements start and there are no late reader callbacks,
++duplicate buffer releases or hangs. Host policy tests and cross-compilation do
++not replace these playback checks.
+diff --git a/modules/codec/Makefile.am b/modules/codec/Makefile.am
+index 9f21022071..13dfc4b29a 100644
+--- a/modules/codec/Makefile.am
++++ b/modules/codec/Makefile.am
+@@ -495,7 +495,7 @@ libomxil_plugin_la_LDFLAGS = $(AM_LDFLAGS) $(codec_RPATH)
+ 
+ libmediacodec_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)/codec/omxil
+ libmediacodec_plugin_la_SOURCES = codec/omxil/mediacodec.c codec/omxil/mediacodec.h \
+-	codec/omxil/mediacodec_profile.h \
++	codec/omxil/mediacodec_profile.h codec/omxil/mediacodec_candidates.h \
+ 	codec/omxil/mediacodec_jni.c codec/omxil/mediacodec_ndk.c codec/omxil/utils.c \
+ 	codec/omxil/omxil_utils.h codec/omxil/qcom.c codec/omxil/qcom.h
+ libmediacodec_plugin_la_LIBADD = libchroma_copy.la libvlc_hxxxhelper.la \
+diff --git a/modules/codec/omxil/mediacodec.c b/modules/codec/omxil/mediacodec.c
+index 82c85720fb..471284fdd3 100644
+--- a/modules/codec/omxil/mediacodec.c
++++ b/modules/codec/omxil/mediacodec.c
+@@ -41,6 +41,7 @@
+ #include <vlc_bits.h>
+ 
+ #include "mediacodec.h"
++#include "mediacodec_candidates.h"
+ #include "../codec/hxxx_helper.h"
+ #include <OMX_Core.h>
+ #include <OMX_Component.h>
+@@ -52,6 +53,8 @@
+ #define DECODE_FLAG_DRAIN (0x02)
+ 
+ #define MAX_PIC 64
++/* Observe failure/retirement even if the opposite codec queue stops moving. */
++#define DEQUEUE_TIMEOUT VLC_TICK_FROM_MS(100)
+ 
+ /**
+  * Callback called when a new block is processed from DecodeBlock.
+@@ -102,6 +105,12 @@ typedef struct decoder_sys_t
+ 
+     vlc_mutex_t     lock;
+     vlc_thread_t    out_thread;
++    bool           out_thread_started;
++    bool           codec_stopped;
++    bool           retry;
++    bool           dolby;
++    /* Serialize renderer buffer release against retirement of the codec. */
++    vlc_mutex_t     release_lock;
+     /* Cond used to signal the output thread */
+     vlc_cond_t      cond;
+     /* Cond used to signal the decoder thread */
+@@ -155,12 +164,23 @@ typedef struct decoder_sys_t
+     };
+ } decoder_sys_t;
+ 
++/* This callback context lives as long as the reader, including queued images.
++ * It must not look up decoder->p_sys after a module reload. */
++struct mc_air_video_context
++{
++    android_video_context_t android;
++    vlc_mutex_t lock;
++    decoder_t *decoder;
++    decoder_sys_t *sys;
++};
++
+ /*****************************************************************************
+  * Local prototypes
+  *****************************************************************************/
+ static int  OpenDecoderNdk(vlc_object_t *);
+ static void CleanDecoder(decoder_sys_t *);
+ static void CloseDecoder(vlc_object_t *);
++static void RetireDecoder(decoder_sys_t *);
+ 
+ static int Video_OnNewBlock(decoder_t *, block_t **);
+ static int VideoHXXX_OnNewBlock(decoder_t *, block_t **);
+@@ -217,6 +237,17 @@ vlc_module_begin ()
+     add_string("decoder-ignore-profile", NULL,
+                MEDIACODEC_IGNORE_PROFILE_TEXT,
+                MEDIACODEC_IGNORE_PROFILE_LONGTEXT)
++    add_bool(CFG_PREFIX "retry", true, "Retry MediaCodec candidates",
++             "Try the next video decoder after startup or runtime failure.")
++    add_string("decoder-score-list", NULL, "MediaCodec candidate scores",
++               "Comma-separated POSIX extended regex=integer rules. First match "
++               "wins; default 100, negative scores disable a component. Dolby "
++               "candidates gain 500 when also supporting HEVC, otherwise 400. "
++               "Higher totals come first; ties keep enumeration order. "
++               "Scores do not override the component blacklist.")
++    add_bool(CFG_PREFIX "fake-dolby-fail", false,
++             "Simulate Dolby Vision decoder startup failure",
++             "For testing the fallback to a base HEVC decoder.")
+     set_callbacks(OpenDecoderNdk, CloseDecoder)
+     add_shortcut("mediacodec_ndk")
+     add_submodule ()
+@@ -318,6 +349,12 @@ static int HEVCSetCSD(decoder_t *p_dec, bool *p_size_changed)
+     if (p_xps != NULL)
+         CSDInit(p_sys, p_xps, 1);
+ 
++    if (p_dec->fmt_in->video.dovi.rpu_present && !p_sys->dolby)
++        hxxx_helper_get_colorimetry(hh, &p_dec->fmt_out.video.primaries,
++                                   &p_dec->fmt_out.video.transfer,
++                                   &p_dec->fmt_out.video.space,
++                                   &p_dec->fmt_out.video.color_range);
++
+     HXXXInitSize(p_dec, p_size_changed);
+     return VLC_SUCCESS;
+ }
+@@ -614,9 +651,7 @@ static int StartMediaCodec(decoder_t *p_dec)
+ 
+         args.video.p_surface = p_sys->video.p_surface;
+ 
+-        if (p_dec->fmt_in->i_codec == VLC_CODEC_HEVC &&
+-            p_dec->fmt_in->video.dovi.rpu_present &&
+-            p_dec->fmt_in->video.dovi.bl_present)
++        if (p_sys->dolby)
+         {
+             /* The vendor decoder determines final colorspace from the RPU. */
+             args.video.color.range = MC_COLOR_RANGE_UNSPECIFIED;
+@@ -648,10 +683,15 @@ static int StartMediaCodec(decoder_t *p_dec)
+         args.audio.i_channel_count  = p_sys->audio.i_channels;
+     }
+ 
+-    if (p_sys->api.configure_decoder(&p_sys->api, &args) != 0)
++    if (p_sys->dolby && var_InheritBool(p_dec, CFG_PREFIX "fake-dolby-fail"))
+     {
++        msg_Warn(p_dec, "MediaCodec: simulating Dolby startup failure for %s",
++                 p_sys->api.psz_name);
+         return MC_API_ERROR;
+     }
++    int ret = p_sys->api.configure_decoder(&p_sys->api, &args);
++    if (ret != 0)
++        return ret;
+ 
+     return p_sys->api.start(&p_sys->api);
+ }
+@@ -661,28 +701,30 @@ static int StartMediaCodec(decoder_t *p_dec)
+  *****************************************************************************/
+ static void StopMediaCodec(decoder_sys_t *p_sys)
+ {
++    if (p_sys->codec_stopped)
++        return;
+     /* Remove all pictures that are currently in flight in order
+      * to prevent the vout from using destroyed output buffers. */
+     if (p_sys->cat == VIDEO_ES)
+         ReleaseAllPictureContexts(p_sys);
+ 
++    vlc_mutex_lock(&p_sys->release_lock);
+     p_sys->api.stop(&p_sys->api);
++    vlc_mutex_unlock(&p_sys->release_lock);
+ }
+ 
+ static bool AndroidPictureContextRelease(struct asurface_picture_ctx *apctx,
+                                          bool render)
+ {
++    android_video_context_t *avctx =
++        vlc_video_context_GetPrivate(apctx->s.vctx, VLC_VIDEO_CONTEXT_AWINDOW);
++    decoder_sys_t *p_sys = avctx->dec_opaque;
++    vlc_mutex_lock(&p_sys->release_lock);
+     int index = atomic_exchange(&apctx->index, -1);
+     if (index >= 0)
+-    {
+-        android_video_context_t *avctx =
+-            vlc_video_context_GetPrivate(apctx->s.vctx, VLC_VIDEO_CONTEXT_AWINDOW);
+-        decoder_sys_t *p_sys = avctx->dec_opaque;
+-
+         p_sys->api.release_out(&p_sys->api, index, render);
+-        return true;
+-    }
+-    return false;
++    vlc_mutex_unlock(&p_sys->release_lock);
++    return index >= 0;
+ }
+ 
+ static bool PictureContextRenderPic(struct picture_context_t *ctx)
+@@ -698,18 +740,15 @@ static bool PictureContextRenderPicTs(struct picture_context_t *ctx,
+ {
+     struct asurface_picture_ctx *apctx =
+         container_of(ctx, struct asurface_picture_ctx, s);
+-
++    android_video_context_t *avctx =
++        vlc_video_context_GetPrivate(ctx->vctx, VLC_VIDEO_CONTEXT_AWINDOW);
++    decoder_sys_t *p_sys = avctx->dec_opaque;
++    vlc_mutex_lock(&p_sys->release_lock);
+     int index = atomic_exchange(&apctx->index, -1);
+     if (index >= 0)
+-    {
+-        android_video_context_t *avctx =
+-            vlc_video_context_GetPrivate(ctx->vctx, VLC_VIDEO_CONTEXT_AWINDOW);
+-        decoder_sys_t *p_sys = avctx->dec_opaque;
+-
+         p_sys->api.release_out_ts(&p_sys->api, index, ts * INT64_C(1000));
+-        return true;
+-    }
+-    return false;
++    vlc_mutex_unlock(&p_sys->release_lock);
++    return index >= 0;
+ }
+ 
+ static struct vlc_asurfacetexture *
+@@ -746,17 +785,12 @@ static void CleanFromLegacyVideoContext(void *priv)
+ {
+     android_video_context_t *avctx = priv;
+     decoder_sys_t *p_sys = avctx->dec_opaque;
++    if (p_sys == NULL)
++        return;
+ 
+     assert(!p_sys->video.use_air);
+ 
+-    vlc_mutex_lock(&p_sys->lock);
+-    /* Unblock output thread waiting in dequeue_out */
+-    DecodeFlushLocked(p_sys);
+-    /* Cancel the output thread */
+-    AbortDecoderLocked(p_sys);
+-    vlc_mutex_unlock(&p_sys->lock);
+-
+-    vlc_join(p_sys->out_thread, NULL);
++    RetireDecoder(p_sys);
+ 
+     CleanDecoder(p_sys);
+ }
+@@ -811,7 +845,11 @@ GetPictureContext(decoder_t *p_dec, unsigned index)
+          * contexts than android MediaCodec buffers */
+         if (!slept)
+             msg_Warn(p_dec, "waiting for more picture contexts (unlikely)");
++        vlc_mutex_unlock(&p_sys->lock);
+         vlc_tick_sleep(VOUT_OUTMEM_SLEEP);
++        vlc_mutex_lock(&p_sys->lock);
++        if (p_sys->b_aborted || p_sys->b_decoder_dead)
++            return NULL;
+         slept = true;
+     }
+ }
+@@ -930,8 +968,15 @@ error:
+ static void
+ AImageReader_OnImageAvailable(void *context, AImageReader *reader)
+ {
+-    decoder_t *p_dec = context;
+-    decoder_sys_t *p_sys = p_dec->p_sys;
++    struct mc_air_video_context *callback = context;
++    vlc_mutex_lock(&callback->lock);
++    decoder_sys_t *p_sys = callback->sys;
++    if (p_sys == NULL)
++    {
++        vlc_mutex_unlock(&callback->lock);
++        return;
++    }
++    decoder_t *p_dec = callback->decoder;
+     assert(p_sys->video.use_air);
+     android_video_context_t *avctx =
+         vlc_video_context_GetPrivate(p_sys->video.ctx, VLC_VIDEO_CONTEXT_AWINDOW);
+@@ -947,17 +992,19 @@ AImageReader_OnImageAvailable(void *context, AImageReader *reader)
+     {
+         msg_Warn(p_dec, "AImageReader_acquireNextImageAsync failed: %d",
+                     status);
++        vlc_mutex_unlock(&callback->lock);
+         return;
+     }
+     vlc_mutex_lock(&p_sys->lock);
+     assert(p_sys->video.air_waiting_count > 0);
+     p_sys->video.air_waiting_count--;
+     vlc_cond_broadcast(&p_sys->video.air_cond);
+-    if (p_sys->b_flush_out)
++    if (p_sys->b_flush_out || p_sys->b_aborted || p_sys->b_decoder_dead)
+         avctx->air_api->AImage.deleteAsync(image, fence_fd);
+     else
+         QueueAImagePicture(p_dec, avctx, image, fence_fd);
+     vlc_mutex_unlock(&p_sys->lock);
++    vlc_mutex_unlock(&callback->lock);
+ }
+ 
+ static int
+@@ -999,20 +1046,13 @@ CreateSurfaceFromAImageReader(decoder_t *p_dec, vlc_decoder_device *dec_dev,
+         return VLC_EGENERIC;
+     }
+ 
+-    struct AImageReader_ImageListener listener = {
+-        .context = p_dec,
+-        .onImageAvailable = AImageReader_OnImageAvailable,
+-    };
+-
+-    air_api->AImageReader.setImageListener(reader, &listener);
+-
+     static const struct vlc_video_context_operations ops =
+     {
+         .destroy = CleanFromVideoContext,
+     };
+     p_sys->video.ctx =
+         vlc_video_context_Create(dec_dev, VLC_VIDEO_CONTEXT_AWINDOW,
+-                                 sizeof(android_video_context_t), &ops);
++                                 sizeof(struct mc_air_video_context), &ops);
+ 
+     if (!p_sys->video.ctx)
+     {
+@@ -1033,6 +1073,15 @@ CreateSurfaceFromAImageReader(decoder_t *p_dec, vlc_decoder_device *dec_dev,
+     p_sys->video.p_surface = window;
+     p_sys->video.use_air = true;
+     p_sys->video.air_waiting_count = 0;
++    struct mc_air_video_context *callback = (void *)avctx;
++    vlc_mutex_init(&callback->lock);
++    callback->decoder = p_dec;
++    callback->sys = p_sys;
++    struct AImageReader_ImageListener listener = {
++        .context = callback,
++        .onImageAvailable = AImageReader_OnImageAvailable,
++    };
++    air_api->AImageReader.setImageListener(reader, &listener);
+     assert(window != NULL);
+     return VLC_SUCCESS;
+ }
+@@ -1101,6 +1150,7 @@ end:
+     return VLC_SUCCESS;
+ 
+ error:
++    avctx->dec_opaque = NULL;
+     vlc_video_context_Release(p_sys->video.ctx);
+     p_sys->video.ctx = NULL;
+     return VLC_EGENERIC;
+@@ -1162,10 +1212,41 @@ static void CleanInputVideo(decoder_t *p_dec)
+     }
+ }
+ 
++static bool RememberFailedCandidate(decoder_t *p_dec)
++{
++    decoder_sys_t *p_sys = p_dec->p_sys;
++    const char *var = "mediacodec-failed-candidates";
++    if (var_Type(p_dec, var) == 0 &&
++        var_Create(p_dec, var, VLC_VAR_STRING) != VLC_SUCCESS)
++        return false;
++    char *old = var_GetString(p_dec, var);
++    if (old == NULL)
++        return false;
++    if (mc_candidate_failed(old, p_sys->api.psz_mime, p_sys->api.psz_name))
++    {
++        free(old);
++        return false;
++    }
++    char *failed = mc_candidate_fail(old, p_sys->api.psz_mime,
++                                    p_sys->api.psz_name);
++    free(old);
++    if (failed == NULL)
++        return false;
++    int ret = var_SetString(p_dec, var, failed);
++    /* The variable string duplication can itself run out of memory. Do not
++     * retry unless the exclusion was actually saved. */
++    char *saved = ret == VLC_SUCCESS ? var_GetString(p_dec, var) : NULL;
++    bool stored = saved != NULL && strcmp(saved, failed) == 0;
++    free(saved);
++    free(failed);
++    return stored;
++}
++
+ /*****************************************************************************
+  * OpenDecoder: Create the decoder instance
+  *****************************************************************************/
+-static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
++static int OpenDecoderAttempt(vlc_object_t *p_this,
++                              pf_MediaCodecApi_init pf_init, bool *retry)
+ {
+     decoder_t *p_dec = (decoder_t *)p_this;
+ 
+@@ -1279,41 +1360,50 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+     p_sys->video.i_mpeg_dar_den = 0;
+     p_sys->video.surfacetexture = NULL;
+     p_sys->b_decoder_dead = false;
++    p_sys->retry = p_dec->fmt_in->i_cat == VIDEO_ES &&
++                   var_InheritBool(p_dec, CFG_PREFIX "retry");
+ 
+     if (pf_init(&p_sys->api) != 0)
+     {
+         free(p_sys);
+         return VLC_EGENERIC;
+     }
+-    /* The HEVC base layer profile is not an Android Dolby Vision profile. */
+-    if (p_sys->api.prepare(&p_sys->api, b_dolby_vision ? -1 : i_profile) != 0)
++    /* The HEVC base layer profile is not an Android Dolby Vision profile.
++     * Keep both MIME modes in the pool when retrying Dolby components. */
++    struct mc_candidate_request requests[3];
++    size_t request_count = mc_candidate_requests(requests, mime,
++                            b_dolby_vision ? -1 : i_profile,
++                            b_dolby_vision && p_sys->retry ? "video/hevc" : NULL,
++                            i_profile);
++    bool vc1_fallback = !strcmp(mime, "video/wvc1") &&
++                       p_dec->fmt_in->i_codec == VLC_CODEC_VC1;
++    i_ret = p_sys->api.prepare(&p_sys->api, requests, request_count, !vc1_fallback);
++    if (i_ret == VLC_ENOENT && vc1_fallback)
+     {
+-        /* If the device can't handle video/wvc1,
+-         * it can probably handle video/x-ms-wmv */
+-        if (!strcmp(mime, "video/wvc1") && p_dec->fmt_in->i_codec == VLC_CODEC_VC1)
+-        {
+-            p_sys->api.psz_mime = "video/x-ms-wmv";
+-            if (p_sys->api.prepare(&p_sys->api, i_profile) != 0)
+-            {
+-                p_sys->api.clean(&p_sys->api);
+-                free(p_sys);
+-                return (VLC_EGENERIC);
+-            }
+-        }
+-        else
++        requests[0].mime = "video/x-ms-wmv";
++        i_ret = p_sys->api.prepare(&p_sys->api, requests, request_count, true);
++    }
++    if (i_ret != VLC_SUCCESS)
++    {
++        if (i_ret == VLC_ENOENT && p_sys->retry)
+         {
+-            p_sys->api.clean(&p_sys->api);
+-            free(p_sys);
+-            return VLC_EGENERIC;
++            msg_Warn(p_dec, "MediaCodec: candidates exhausted, trying other modules");
++            var_Create(p_dec, "mediacodec-failed", VLC_VAR_VOID);
+         }
++        p_sys->api.clean(&p_sys->api);
++        free(p_sys);
++        return i_ret;
+     }
++    p_sys->dolby = !strcmp(p_sys->api.psz_mime, "video/dolby-vision");
+ 
+     p_dec->p_sys = p_sys;
+ 
+     vlc_mutex_init(&p_sys->lock);
++    vlc_mutex_init(&p_sys->release_lock);
+     vlc_cond_init(&p_sys->cond);
+     vlc_cond_init(&p_sys->dec_cond);
+ 
++    p_sys->cat = p_dec->fmt_in->i_cat;
+     if (p_dec->fmt_in->i_cat == VIDEO_ES)
+     {
+         vlc_cond_init(&p_sys->video.air_cond);
+@@ -1331,6 +1421,9 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+         p_sys->pf_on_new_block = Video_OnNewBlock;
+         p_sys->pf_on_flush = Video_OnFlush;
+         p_sys->pf_process_output = Video_ProcessOutput;
++        p_dec->fmt_out.video = p_dec->fmt_in->video;
++        if (b_dolby_vision && !p_sys->dolby)
++            memset(&p_dec->fmt_out.video.dovi, 0, sizeof(p_dec->fmt_out.video.dovi));
+ 
+         p_sys->video.timestamp_fifo = timestamp_FifoNew(32);
+         if (!p_sys->video.timestamp_fifo)
+@@ -1342,7 +1435,6 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+              * the surface attached to it */
+             p_dec->fmt_out.i_codec = VLC_CODEC_ANDROID_OPAQUE;
+ 
+-            p_dec->fmt_out.video = p_dec->fmt_in->video;
+             if (p_dec->fmt_out.video.i_sar_num * p_dec->fmt_out.video.i_sar_den == 0)
+             {
+                 p_dec->fmt_out.video.i_sar_num = 1;
+@@ -1432,16 +1524,21 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+     i_ret = StartMediaCodec(p_dec);
+     if (i_ret != VLC_SUCCESS)
+     {
+-        msg_Err(p_dec, "StartMediaCodec failed");
++        msg_Warn(p_dec, "MediaCodec: startup failed for %s (%s)",
++                 p_sys->api.psz_name, p_sys->api.psz_mime);
++        *retry = p_sys->retry && i_ret != VLC_ENOMEM &&
++                 RememberFailedCandidate(p_dec);
+         goto bailout;
+     }
+ 
+     if (vlc_clone(&p_sys->out_thread, OutThread, p_dec))
+     {
+         msg_Err(p_dec, "vlc_clone failed");
+-        vlc_mutex_unlock(&p_sys->lock);
+         goto bailout;
+     }
++    p_sys->out_thread_started = true;
++    msg_Dbg(p_dec, "MediaCodec: started %s (%s)",
++            p_sys->api.psz_name, p_sys->api.psz_mime);
+ 
+     p_dec->pf_decode = DecodeBlock;
+     p_dec->pf_flush  = DecodeFlush;
+@@ -1449,11 +1546,23 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
+     return VLC_SUCCESS;
+ 
+ bailout:
+-    CleanInputVideo(p_dec);
+-    CleanDecoder(p_sys);
++    CloseDecoder(p_this);
++    p_dec->p_sys = NULL;
+     return VLC_EGENERIC;
+ }
+ 
++static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
++{
++    bool retry;
++    int ret;
++    do
++    {
++        retry = false;
++        ret = OpenDecoderAttempt(p_this, pf_init, &retry);
++    } while (retry);
++    return ret;
++}
++
+ static int OpenDecoderNdk(vlc_object_t *p_this)
+ {
+     return OpenDecoder(p_this, MediaCodecNdk_Init);
+@@ -1496,43 +1605,67 @@ static void CleanDecoder(decoder_sys_t *p_sys)
+ /*****************************************************************************
+  * CloseDecoder: Close the decoder instance
+  *****************************************************************************/
+-static void CloseDecoder(vlc_object_t *p_this)
++/* Stop the producer before another candidate can bind the same Surface.
++ * A legacy picture may still hold p_sys through its video context afterwards. */
++static void RetireDecoder(decoder_sys_t *p_sys)
+ {
+-    decoder_t *p_dec = (decoder_t *)p_this;
+-    decoder_sys_t *p_sys = p_dec->p_sys;
++    if (p_sys->codec_stopped)
++        return;
++
++    if (p_sys->cat == VIDEO_ES && p_sys->video.ctx && p_sys->video.use_air)
++    {
++        struct mc_air_video_context *callback =
++            vlc_video_context_GetPrivate(p_sys->video.ctx, VLC_VIDEO_CONTEXT_AWINDOW);
++        vlc_mutex_lock(&callback->lock);
++        callback->sys = NULL;
++        callback->decoder = NULL;
++        vlc_mutex_unlock(&callback->lock);
++        callback->android.air_api->AImageReader.setImageListener(
++                                            callback->android.air, NULL);
++    }
+ 
+     vlc_mutex_lock(&p_sys->lock);
+     p_sys->b_decoder_dead = true;
++    AbortDecoderLocked(p_sys);
+     vlc_mutex_unlock(&p_sys->lock);
+ 
+-    if (p_sys->cat == VIDEO_ES && p_sys->video.ctx)
++    if (p_sys->out_thread_started)
+     {
+-        if (!p_sys->video.use_air)
+-        {
+-            vlc_video_context_Release(p_sys->video.ctx);
+-            /* If we have a video context, we're using Surface with inflight
+-            * pictures, which might already have been queued, and flushing
+-            * them would make them invalid, breaking mechanism like waiting
+-            * on OnFrameAvailableListener.*/
+-            CleanInputVideo(p_dec);
+-            return;
+-        }
+-        android_video_context_t *avctx =
+-            vlc_video_context_GetPrivate(p_sys->video.ctx, VLC_VIDEO_CONTEXT_AWINDOW);
+-        avctx->air_api->AImageReader.setImageListener(avctx->air, NULL);
+-        vlc_video_context_Release(p_sys->video.ctx);
++        vlc_join(p_sys->out_thread, NULL);
++        p_sys->out_thread_started = false;
+     }
++    StopMediaCodec(p_sys);
++    p_sys->codec_stopped = true;
++}
++
++static void CloseDecoder(vlc_object_t *p_this)
++{
++    decoder_t *p_dec = (decoder_t *)p_this;
++    decoder_sys_t *p_sys = p_dec->p_sys;
+ 
+     vlc_mutex_lock(&p_sys->lock);
+-    /* Unblock output thread waiting in dequeue_out */
+-    DecodeFlushLocked(p_sys);
+-    /* Cancel the output thread */
+-    AbortDecoderLocked(p_sys);
++    p_sys->b_decoder_dead = true;
++    bool failed = p_sys->b_aborted;
+     vlc_mutex_unlock(&p_sys->lock);
++    CleanInputVideo(p_dec);
+ 
+-    vlc_join(p_sys->out_thread, NULL);
++    if (p_sys->cat == VIDEO_ES && p_sys->video.ctx && !p_sys->video.use_air)
++    {
++        /* Normal close retains the codec until queued pictures are rendered.
++         * Failure/startup cleanup must release it before opening a replacement,
++         * but the picture contexts themselves remain alive until vout is done. */
++        if (!p_sys->out_thread_started || failed)
++            RetireDecoder(p_sys);
++        vlc_video_context_Release(p_sys->video.ctx);
++        return;
++    }
+ 
+-    CleanInputVideo(p_dec);
++    RetireDecoder(p_sys);
++    if (p_sys->cat == VIDEO_ES && p_sys->video.ctx)
++    {
++        vlc_video_context_Release(p_sys->video.ctx);
++        p_sys->video.ctx = NULL;
++    }
+     CleanDecoder(p_sys);
+ }
+ 
+@@ -1599,7 +1732,12 @@ static int Video_ProcessOutput(decoder_t *p_dec, mc_api_out *p_out,
+ 
+                 struct asurface_picture_ctx *apctx =
+                     GetPictureContext(p_dec,p_out->buf.i_index);
+-                assert(apctx);
++                if (apctx == NULL)
++                {
++                    picture_Release(p_pic);
++                    return p_sys->api.release_out(&p_sys->api,
++                                                 p_out->buf.i_index, false);
++                }
+                 assert(apctx->s.vctx);
+                 vlc_video_context_Hold(apctx->s.vctx);
+                 p_pic->context = &apctx->s;
+@@ -1654,22 +1792,22 @@ static int Video_ProcessOutput(decoder_t *p_dec, mc_api_out *p_out,
+                 p_out->conf.video.crop_right, p_out->conf.video.crop_bottom);
+ 
+         /* Only use MediaCodec output as fallback when container/input is unspecified */
+-        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++        if (!p_sys->dolby &&
+             p_dec->fmt_out.video.primaries == COLOR_PRIMARIES_UNDEF)
+             p_dec->fmt_out.video.primaries =
+                 mc_to_vlc_primaries(p_out->conf.video.color.standard);
+ 
+-        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++        if (!p_sys->dolby &&
+             p_dec->fmt_out.video.space == COLOR_SPACE_UNDEF)
+             p_dec->fmt_out.video.space =
+                  mc_to_vlc_color_space(p_out->conf.video.color.standard);
+ 
+-        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++        if (!p_sys->dolby &&
+             p_dec->fmt_out.video.transfer == TRANSFER_FUNC_UNDEF)
+             p_dec->fmt_out.video.transfer =
+                 mc_to_vlc_color_transfer(p_out->conf.video.color.transfer);
+ 
+-        if (!p_dec->fmt_in->video.dovi.rpu_present &&
++        if (!p_sys->dolby &&
+             p_dec->fmt_out.video.color_range == COLOR_RANGE_UNDEF)
+             p_dec->fmt_out.video.color_range =
+                 mc_to_vlc_color_range(p_out->conf.video.color.range);
+@@ -1948,13 +2086,20 @@ static void *OutThread(void *data)
+ 
+         /* Wait for an output buffer. This function returns when a new output
+          * is available or if output is flushed. */
+-        i_index = p_sys->api.dequeue_out(&p_sys->api, -1);
++        i_index = p_sys->api.dequeue_out(&p_sys->api, DEQUEUE_TIMEOUT);
+ 
+         vlc_mutex_lock(&p_sys->lock);
+ 
++        if (p_sys->b_decoder_dead || p_sys->b_aborted)
++        {
++            if (i_index >= 0)
++                p_sys->api.release_out(&p_sys->api, i_index, false);
++            break;
++        }
++
+         /* Ignore dequeue_out errors caused by flush, or late picture being
+          * dequeued after close. */
+-        if (p_sys->b_flush_out || p_sys->b_decoder_dead)
++        if (p_sys->b_flush_out)
+         {
+             /* If i_index >= 0, Release it. There is no way to know if i_index
+              * is owned by us, so don't check the error. */
+@@ -2015,7 +2160,7 @@ static void *OutThread(void *data)
+         msg_Warn(p_dec, "OutThread stopped");
+ 
+     /* Signal DecoderFlush that the output thread aborted */
+-    p_sys->b_aborted = true;
++    AbortDecoderLocked(p_sys);
+     vlc_cond_signal(&p_sys->dec_cond);
+     vlc_mutex_unlock(&p_sys->lock);
+ 
+@@ -2046,7 +2191,7 @@ static int QueueBlockLocked(decoder_t *p_dec, block_t *p_in_block,
+     while (b_drain || (p_block = GetNextBlock(p_sys, p_in_block)))
+     {
+         vlc_mutex_unlock(&p_sys->lock);
+-        int i_index = p_sys->api.dequeue_in(&p_sys->api, -1);
++        int i_index = p_sys->api.dequeue_in(&p_sys->api, DEQUEUE_TIMEOUT);
+         vlc_mutex_lock(&p_sys->lock);
+ 
+         if (p_sys->b_aborted)
+@@ -2140,10 +2285,9 @@ static int DecodeBlock(decoder_t *p_dec, block_t *p_in_block)
+ 
+     if (p_sys->b_aborted)
+     {
+-        if (p_sys->b_has_format)
+-            goto end;
+-        else
++        if (p_sys->retry || !p_sys->b_has_format)
+             goto reload;
++        goto end;
+     }
+ 
+     if (p_in_block == NULL)
+@@ -2183,6 +2327,8 @@ static int DecodeBlock(decoder_t *p_dec, block_t *p_in_block)
+     {
+         if (i_ret != 0)
+         {
++            /* Invalid bitstream/allocation errors are not codec failures. */
++            p_sys->retry = false;
+             AbortDecoderLocked(p_sys);
+             msg_Err(p_dec, "pf_on_new_block failed");
+         }
+@@ -2213,6 +2359,8 @@ static int DecodeBlock(decoder_t *p_dec, block_t *p_in_block)
+                 break;
+             default:
+                 msg_Err(p_dec, "StartMediaCodec failed");
++                if (i_ret == VLC_ENOMEM)
++                    p_sys->retry = false;
+                 AbortDecoderLocked(p_sys);
+                 goto end;
+             }
+@@ -2228,16 +2376,18 @@ end:
+         block_Release(p_in_block);
+     /* Too late to reload here, we already modified/released the input block,
+      * do it next time. */
+-    int ret = p_sys->b_aborted && p_sys->b_has_format ? VLCDEC_ECRITICAL
+-                                                      : VLCDEC_SUCCESS;
++    int ret = p_sys->b_aborted && p_sys->b_has_format && !p_sys->retry
++            ? VLCDEC_ECRITICAL : VLCDEC_SUCCESS;
+     vlc_mutex_unlock(&p_sys->lock);
+     return ret;
+ 
+ reload:
++    AbortDecoderLocked(p_sys);
+     vlc_mutex_unlock(&p_sys->lock);
+-    /* Add an empty variable so that mediacodec won't be loaded again
+-     * for this ES */
+-    var_Create(p_dec, "mediacodec-failed", VLC_VAR_VOID);
++    msg_Warn(p_dec, "MediaCodec: runtime failure for %s (%s)",
++             p_sys->api.psz_name, p_sys->api.psz_mime);
++    if (!p_sys->retry || !RememberFailedCandidate(p_dec))
++        var_Create(p_dec, "mediacodec-failed", VLC_VAR_VOID);
+     return VLCDEC_RELOAD;
+ }
+ 
+diff --git a/modules/codec/omxil/mediacodec.h b/modules/codec/omxil/mediacodec.h
+index a5d73c6b6e..0d99b896bd 100644
+--- a/modules/codec/omxil/mediacodec.h
++++ b/modules/codec/omxil/mediacodec.h
+@@ -31,6 +31,11 @@ typedef struct mc_api_out mc_api_out;
+ typedef int (*pf_MediaCodecApi_init)(mc_api*);
+ 
+ int MediaCodecNdk_Init(mc_api*);
++struct mc_candidate;
++struct mc_candidate_request;
++int MediaCodec_SelectCandidate(vlc_object_t *, vlc_fourcc_t,
++                              const struct mc_candidate_request *, size_t,
++                              bool, bool, struct mc_candidate *);
+ 
+ #define MC_API_ERROR (-1)
+ #define MC_API_INFO_TRYAGAIN (-11)
+@@ -170,7 +175,8 @@ struct mc_api
+     bool b_direct_rendering;
+ 
+     void (*clean)(mc_api *);
+-    int (*prepare)(mc_api *, int i_profile);
++    int (*prepare)(mc_api *, const struct mc_candidate_request *, size_t,
++                   bool allow_relax);
+     int (*configure_decoder)(mc_api *, union mc_api_args* p_args);
+     int (*start)(mc_api *);
+     int (*stop)(mc_api *);
+diff --git a/modules/codec/omxil/mediacodec_candidates.h b/modules/codec/omxil/mediacodec_candidates.h
+new file mode 100644
+index 0000000000..c1cab6771b
+--- /dev/null
++++ b/modules/codec/omxil/mediacodec_candidates.h
+@@ -0,0 +1,315 @@
++/* Copyright (C) 2026 VLC authors and VideoLAN
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++#ifndef VLC_MEDIACODEC_CANDIDATES_H
++#define VLC_MEDIACODEC_CANDIDATES_H
++
++#include <errno.h>
++#include <limits.h>
++#include <regex.h>
++#include <stdbool.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++
++struct mc_candidate
++{
++    char *name;
++    const char *mime; /* Borrowed from the request, normally a string literal. */
++    int64_t score;
++    int quirks;
++};
++
++struct mc_candidate_request
++{
++    const char *mime;
++    int profile;
++    int bonus;
++    const char *required_mime;
++};
++
++static inline size_t mc_candidate_requests(struct mc_candidate_request requests[3],
++                                          const char *mime, int profile,
++                                          const char *base_mime, int base_profile)
++{
++    if (base_mime == NULL)
++    {
++        requests[0] = (struct mc_candidate_request) { mime, profile, 0, NULL };
++        return 1;
++    }
++    requests[0] = (struct mc_candidate_request) { mime, profile, 500, base_mime };
++    requests[1] = (struct mc_candidate_request) { mime, profile, 400, NULL };
++    requests[2] = (struct mc_candidate_request) { base_mime, base_profile, 0, NULL };
++    return 3;
++}
++
++struct mc_candidates
++{
++    struct mc_candidate *data;
++    size_t count;
++};
++
++struct mc_score_rule
++{
++    regex_t regex;
++    int score;
++    struct mc_score_rule *next;
++};
++
++static inline void mc_score_rules_clear(struct mc_score_rule *rule)
++{
++    while (rule != NULL)
++    {
++        struct mc_score_rule *next = rule->next;
++        regfree(&rule->regex);
++        free(rule);
++        rule = next;
++    }
++}
++
++/* Invalid entries are ignored. Allocation failures abort the entire parse. */
++static inline int mc_score_rules_parse(const char *text,
++                                      struct mc_score_rule **rules,
++                                      unsigned *invalid)
++{
++    *rules = NULL;
++    *invalid = 0;
++    if (text == NULL || *text == '\0')
++        return 0;
++    char *copy = strdup(text);
++    if (copy == NULL)
++        return -1;
++    struct mc_score_rule **tail = rules;
++    char *entry = copy;
++    while (entry != NULL)
++    {
++        char *next = strchr(entry, ',');
++        if (next != NULL)
++            *next++ = '\0';
++        while (*entry == ' ' || *entry == '\t')
++            entry++;
++        char *eq = strrchr(entry, '=');
++        char *end;
++        long score = 0;
++        bool valid = eq != NULL && eq != entry;
++        if (valid)
++        {
++            *eq = '\0';
++            char *trim = eq;
++            while (trim > entry && (trim[-1] == ' ' || trim[-1] == '\t'))
++                *--trim = '\0';
++            errno = 0;
++            score = strtol(eq + 1, &end, 10);
++            valid = end != eq + 1 && errno == 0 && score >= INT_MIN
++                 && score <= INT_MAX && *entry != '\0';
++            while (*end == ' ' || *end == '\t')
++                end++;
++            valid = valid && *end == '\0';
++        }
++        if (valid)
++        {
++            struct mc_score_rule *rule = malloc(sizeof(*rule));
++            if (rule == NULL)
++                goto error;
++            int ret = regcomp(&rule->regex, entry, REG_EXTENDED | REG_NOSUB);
++            if (ret == 0)
++            {
++                rule->score = score;
++                rule->next = NULL;
++                *tail = rule;
++                tail = &rule->next;
++            }
++            else
++            {
++                free(rule);
++                if (ret == REG_ESPACE)
++                    goto error;
++                valid = false;
++            }
++        }
++        if (!valid)
++            (*invalid)++;
++        entry = next;
++    }
++    free(copy);
++    return 0;
++error:
++    free(copy);
++    mc_score_rules_clear(*rules);
++    *rules = NULL;
++    return -1;
++}
++
++static inline int mc_candidate_score(const struct mc_score_rule *rule,
++                                     const char *name)
++{
++    for (; rule != NULL; rule = rule->next)
++        if (regexec(&rule->regex, name, 0, NULL, 0) == 0)
++            return rule->score;
++    return 100;
++}
++
++static inline void mc_candidates_clear(struct mc_candidates *list)
++{
++    for (size_t i = 0; i < list->count; i++)
++        free(list->data[i].name);
++    free(list->data);
++    *list = (struct mc_candidates) { 0 };
++}
++
++/* Insert stably, highest score first. A component can have several MIME modes. */
++static inline int mc_candidates_add(struct mc_candidates *list,
++                                    const char *name, const char *mime,
++                                    int64_t score, int quirks)
++{
++    for (size_t i = 0; i < list->count; i++)
++        if (strcmp(list->data[i].name, name) == 0 &&
++            strcmp(list->data[i].mime, mime) == 0)
++        {
++            if (list->data[i].score >= score)
++                return 0;
++            struct mc_candidate entry = list->data[i];
++            entry.score = score;
++            entry.quirks = quirks;
++            while (i > 0 && list->data[i - 1].score < score)
++            {
++                list->data[i] = list->data[i - 1];
++                i--;
++            }
++            list->data[i] = entry;
++            return 0;
++        }
++    char *copy = strdup(name);
++    if (copy == NULL)
++        return -1;
++    if (list->count == (size_t)-1 / sizeof(*list->data))
++    {
++        free(copy);
++        return -1;
++    }
++    struct mc_candidate *data = realloc(list->data,
++                                       (list->count + 1) * sizeof(*data));
++    if (data == NULL)
++    {
++        free(copy);
++        return -1;
++    }
++    list->data = data;
++    size_t pos = list->count++;
++    while (pos > 0 && data[pos - 1].score < score)
++    {
++        data[pos] = data[pos - 1];
++        pos--;
++    }
++    data[pos] = (struct mc_candidate) { copy, mime, score, quirks };
++    return 0;
++}
++
++/* Decoder-private state: MIME<TAB>name<NEWLINE>. Never inherited globally. */
++static inline bool mc_candidate_failed(const char *failed, const char *mime,
++                                       const char *name)
++{
++    if (failed == NULL)
++        return false;
++    size_t m = strlen(mime), n = strlen(name);
++    for (const char *entry = failed; *entry; )
++    {
++        const char *end = strchr(entry, '\n');
++        if (end == NULL)
++            break;
++        if ((size_t)(end - entry) == m + n + 1 &&
++            memcmp(entry, mime, m) == 0 && entry[m] == '\t' &&
++            memcmp(entry + m + 1, name, n) == 0)
++            return true;
++        entry = end + 1;
++    }
++    return false;
++}
++
++static inline char *mc_candidate_fail(const char *failed, const char *mime,
++                                      const char *name)
++{
++    if (failed == NULL)
++        failed = "";
++    if (mc_candidate_failed(failed, mime, name))
++        return strdup(failed);
++    size_t f = strlen(failed), m = strlen(mime), n = strlen(name);
++    if (n > (size_t)-1 - 3 || m > (size_t)-1 - n - 3 ||
++        f > (size_t)-1 - m - n - 3)
++        return NULL;
++    char *result = malloc(f + m + n + 3);
++    if (result != NULL)
++    {
++        memcpy(result, failed, f);
++        memcpy(result + f, mime, m);
++        result[f + m] = '\t';
++        memcpy(result + f + m + 1, name, n);
++        result[f + m + n + 1] = '\n';
++        result[f + m + n + 2] = '\0';
++    }
++    return result;
++}
++
++/* Apply the same exclusions during strict and relaxed enumeration. */
++static inline int mc_candidates_offer(struct mc_candidates *list,
++                                      const struct mc_candidate_request *request,
++                                      const struct mc_score_rule *rules,
++                                      const char *failed, const char *name,
++                                      bool blacklisted, int quirks)
++{
++    if (blacklisted || mc_candidate_failed(failed, request->mime, name))
++        return 0;
++    int score = mc_candidate_score(rules, name);
++    if (score < 0)
++        return 0;
++    return mc_candidates_add(list, name, request->mime,
++                             (int64_t)score + request->bonus, quirks);
++}
++
++/* Enumerators append candidates and return zero on success, a negative error
++ * otherwise. No partial result escapes on error. Returns 1 for an empty pool.
++ * MIME strings must outlive the selected candidate; only its name is owned. */
++typedef int (*mc_candidate_enumerate)(void *, const struct mc_candidate_request *,
++                                    struct mc_candidates *);
++
++static inline int mc_candidates_select(const struct mc_candidate_request *requests,
++                                       size_t count, bool allow_relax,
++                                       mc_candidate_enumerate enumerate, void *opaque,
++                                       struct mc_candidate *result, bool *relaxed)
++{
++    struct mc_candidates list = { 0 };
++    *result = (struct mc_candidate) { 0 };
++    *relaxed = false;
++    bool positive_profile = false;
++    for (size_t i = 0; i < count; i++)
++        positive_profile |= requests[i].profile > 0;
++    for (unsigned pass = 0; pass < 2; pass++)
++    {
++        for (size_t i = 0; i < count; i++)
++        {
++            struct mc_candidate_request request = requests[i];
++            if (pass && request.profile > 0)
++                request.profile = -1;
++            int ret = enumerate(opaque, &request, &list);
++            if (ret != 0)
++            {
++                mc_candidates_clear(&list);
++                return ret;
++            }
++        }
++        if (list.count != 0)
++        {
++            *result = list.data[0];
++            list.data[0].name = NULL;
++            mc_candidates_clear(&list);
++            return 0;
++        }
++        if (pass || !allow_relax || !positive_profile)
++            break;
++        *relaxed = true;
++    }
++    mc_candidates_clear(&list);
++    return 1;
++}
++
++#endif
+diff --git a/modules/codec/omxil/mediacodec_jni.c b/modules/codec/omxil/mediacodec_jni.c
+index fb48cafd68..494e00127d 100644
+--- a/modules/codec/omxil/mediacodec_jni.c
++++ b/modules/codec/omxil/mediacodec_jni.c
+@@ -38,11 +38,9 @@
+ 
+ #include "mediacodec.h"
+ #include "mediacodec_profile.h"
++#include "mediacodec_candidates.h"
+ #include "../../video_output/android/env.h"
+ 
+-char* MediaCodec_GetName(vlc_object_t *p_obj, vlc_fourcc_t codec,
+-                         const char *psz_mime, int profile, int *p_quirks);
+-
+ #define THREAD_NAME "mediacodec"
+ 
+ /*****************************************************************************
+@@ -104,12 +102,16 @@ static const struct member members[] = {
+ static int jstrcmp(JNIEnv* env, jobject str, const char* str2)
+ {
+     jsize len = (*env)->GetStringUTFLength(env, str);
++    if ((*env)->ExceptionCheck(env))
++        return -2;
+     if (len != (jsize) strlen(str2))
+         return -1;
+     const char *ptr = (*env)->GetStringUTFChars(env, str, NULL);
++    if (ptr == NULL)
++        return -2;
+     int ret = memcmp(ptr, str2, len);
+     (*env)->ReleaseStringUTFChars(env, str, ptr);
+-    return ret;
++    return ret == 0 ? 0 : -1;
+ }
+ 
+ static inline bool check_exception(JNIEnv *env)
+@@ -217,7 +219,7 @@ static char *GetManufacturer(JNIEnv *env)
+     char *manufacturer = NULL;
+ 
+     jclass clazz = (*env)->FindClass(env, "android/os/Build");
+-    if (CHECK_EXCEPTION())
++    if (CHECK_EXCEPTION() || clazz == NULL)
+         return NULL;
+ 
+     jfieldID id = (*env)->GetStaticFieldID(env, clazz, "MANUFACTURER",
+@@ -227,7 +229,7 @@ static char *GetManufacturer(JNIEnv *env)
+ 
+     jstring jstr = (*env)->GetStaticObjectField(env, clazz, id);
+ 
+-    if (CHECK_EXCEPTION())
++    if (CHECK_EXCEPTION() || jstr == NULL)
+         goto end;
+ 
+     const char *str = (*env)->GetStringUTFChars(env, jstr, 0);
+@@ -236,179 +238,203 @@ static char *GetManufacturer(JNIEnv *env)
+         manufacturer = strdup(str);
+         (*env)->ReleaseStringUTFChars(env, jstr, str);
+     }
++    else
++        CHECK_EXCEPTION();
++    (*env)->DeleteLocalRef(env, jstr);
+ 
+ end:
+     (*env)->DeleteLocalRef(env, clazz);
+     return manufacturer;
+ }
+ 
+-/*****************************************************************************
+- * MediaCodec_GetName
+- *****************************************************************************/
+-char* MediaCodec_GetName(vlc_object_t *p_obj, vlc_fourcc_t codec,
+-                         const char *psz_mime, int profile, int *p_quirks)
++struct mc_enumeration
+ {
++    vlc_object_t *obj;
+     JNIEnv *env;
+-    int num_codecs;
+-    jstring jmime;
+-    char *psz_name = NULL;
+-
+-    if (!(env = android_getEnv(p_obj, THREAD_NAME)))
+-        return NULL;
+-
+-    if (!InitJNIFields(p_obj, env))
+-        return NULL;
+-
+-    jmime = JNI_NEW_STRING(psz_mime);
+-    if (!jmime)
+-        return NULL;
++    vlc_fourcc_t codec;
++    bool video;
++    const struct mc_score_rule *rules;
++    const char *failed;
++    const char *ignore_names;
++};
+ 
+-    num_codecs = (*env)->CallStaticIntMethod(env,
+-                                             jfields.media_codec_list_class,
+-                                             jfields.get_codec_count);
++static int EnumerateCandidates(void *opaque,
++                               const struct mc_candidate_request *request,
++                               struct mc_candidates *candidates)
++{
++    const struct mc_enumeration *ctx = opaque;
++    vlc_object_t *p_obj = ctx->obj;
++    JNIEnv *env = ctx->env;
++    int ret = VLC_SUCCESS;
++    jstring jmime = JNI_NEW_STRING(request->mime);
++    if (jmime == NULL)
++        return VLC_ENOMEM;
++
++    int num_codecs = (*env)->CallStaticIntMethod(env,
++                         jfields.media_codec_list_class, jfields.get_codec_count);
++    if (CHECK_EXCEPTION())
++    {
++        ret = VLC_EGENERIC;
++        goto done;
++    }
+ 
+     for (int i = 0; i < num_codecs; i++)
+     {
+-        jobject codec_capabilities = NULL;
+-        jobject profile_levels = NULL;
+-        jobject info = NULL;
+-        jobject name = NULL;
+-        jobject types = NULL;
+-        jsize name_len = 0;
+-        int profile_levels_len = 0, num_types = 0;
++        jobject codec_capabilities = NULL, profile_levels = NULL;
++        jobject info = NULL, name = NULL, types = NULL;
+         const char *name_ptr = NULL;
+-        bool found = false;
+-        bool b_adaptive = false;
++        bool found = false, b_adaptive = false;
++        int quirks = 0;
+ 
+         info = (*env)->CallStaticObjectMethod(env, jfields.media_codec_list_class,
+                                               jfields.get_codec_info_at, i);
+-
++        if (CHECK_EXCEPTION() || info == NULL)
++            goto error;
+         name = (*env)->CallObjectMethod(env, info, jfields.get_name);
+-        name_len = (*env)->GetStringUTFLength(env, name);
++        if (CHECK_EXCEPTION() || name == NULL)
++            goto error;
++        jsize name_len = (*env)->GetStringUTFLength(env, name);
++        if (CHECK_EXCEPTION())
++            goto error;
+         name_ptr = (*env)->GetStringUTFChars(env, name, NULL);
+-
+-        if (OMXCodec_IsBlacklisted(name_ptr, name_len))
++        if (CHECK_EXCEPTION() || name_ptr == NULL)
++        {
++            ret = VLC_ENOMEM;
++            goto loopclean;
++        }
++        if (strpbrk(name_ptr, "\t\n") != NULL ||
++            OMXCodec_IsBlacklisted(name_ptr, name_len) ||
++            mc_candidate_failed(ctx->failed, request->mime, name_ptr) ||
++            mc_candidate_score(ctx->rules, name_ptr) < 0)
+             goto loopclean;
+ 
+-        if ((*env)->CallBooleanMethod(env, info, jfields.is_encoder))
++        bool encoder = (*env)->CallBooleanMethod(env, info, jfields.is_encoder);
++        if (CHECK_EXCEPTION())
++            goto error;
++        if (encoder)
+             goto loopclean;
+ 
+-        codec_capabilities = (*env)->CallObjectMethod(env, info,
+-                                                      jfields.get_capabilities_for_type,
+-                                                      jmime);
++        /* Check declared MIME support before querying capabilities: asking for
++         * an unsupported type normally throws IllegalArgumentException. */
++        types = (*env)->CallObjectMethod(env, info, jfields.get_supported_types);
++        if (CHECK_EXCEPTION() || types == NULL)
++            goto error;
++        int num_types = (*env)->GetArrayLength(env, types);
+         if (CHECK_EXCEPTION())
++            goto error;
++        bool supports_mime = false;
++        bool supports_required = request->required_mime == NULL;
++        for (int j = 0; j < num_types; j++)
+         {
+-            msg_Warn(p_obj, "Exception occurred in MediaCodecInfo.getCapabilitiesForType");
+-            goto loopclean;
++            jobject type = (*env)->GetObjectArrayElement(env, types, j);
++            if (CHECK_EXCEPTION() || type == NULL)
++            {
++                if (type != NULL)
++                    (*env)->DeleteLocalRef(env, type);
++                goto error;
++            }
++            int match = jstrcmp(env, type, request->mime);
++            bool exception = CHECK_EXCEPTION() || match == -2;
++            supports_mime |= match == 0;
++            if (!exception && request->required_mime != NULL)
++            {
++                match = jstrcmp(env, type, request->required_mime);
++                exception = CHECK_EXCEPTION() || match == -2;
++                supports_required |= match == 0;
++            }
++            (*env)->DeleteLocalRef(env, type);
++            if (exception)
++                goto error;
+         }
+-        else if (codec_capabilities)
++        if (!supports_mime || !supports_required)
++            goto loopclean;
++
++        codec_capabilities = (*env)->CallObjectMethod(env, info,
++                                  jfields.get_capabilities_for_type, jmime);
++        if (CHECK_EXCEPTION() || codec_capabilities == NULL)
++            goto error;
++        profile_levels = (*env)->GetObjectField(env, codec_capabilities,
++                                               jfields.profile_levels_field);
++        if (CHECK_EXCEPTION())
++            goto error;
++        int profile_levels_len = profile_levels != NULL
++                               ? (*env)->GetArrayLength(env, profile_levels) : 0;
++        if (CHECK_EXCEPTION())
++            goto error;
++        if (jfields.is_feature_supported)
+         {
+-            profile_levels = (*env)->GetObjectField(env, codec_capabilities, jfields.profile_levels_field);
+-            if (profile_levels)
+-                profile_levels_len = (*env)->GetArrayLength(env, profile_levels);
+-            if (jfields.is_feature_supported)
++            jstring jfeature = JNI_NEW_STRING("adaptive-playback");
++            if (jfeature == NULL)
+             {
+-                jstring jfeature = JNI_NEW_STRING("adaptive-playback");
+-                b_adaptive =
+-                    (*env)->CallBooleanMethod(env, codec_capabilities,
+-                                              jfields.is_feature_supported,
+-                                              jfeature);
+-                CHECK_EXCEPTION();
+-                (*env)->DeleteLocalRef(env, jfeature);
++                ret = VLC_ENOMEM;
++                goto loopclean;
+             }
++            b_adaptive = (*env)->CallBooleanMethod(env, codec_capabilities,
++                                         jfields.is_feature_supported, jfeature);
++            bool exception = CHECK_EXCEPTION();
++            (*env)->DeleteLocalRef(env, jfeature);
++            if (exception)
++                goto error;
+         }
+-        msg_Dbg(p_obj, "Number of profile levels: %d", profile_levels_len);
+-
+-        types = (*env)->CallObjectMethod(env, info, jfields.get_supported_types);
+-        num_types = (*env)->GetArrayLength(env, types);
+-        found = false;
+-
+-        for (int j = 0; j < num_types && !found; j++)
++        bool ignore_profile = MediaCodec_MatchDecoderList(
++                       ctx->ignore_names, name_ptr, name_len, false);
++        found = request->profile <= 0 || ignore_profile;
++        /* This component does not expose profiles but supports high profile. */
++        if (!strncmp(name_ptr, "OMX.LUMEVideoDecoder", __MIN(20, name_len)))
++            found = true;
++        for (int j = 0; j < profile_levels_len && !found; j++)
+         {
+-            jobject type = (*env)->GetObjectArrayElement(env, types, j);
+-            if (!jstrcmp(env, type, psz_mime))
++            jobject level = (*env)->GetObjectArrayElement(env, profile_levels, j);
++            if (CHECK_EXCEPTION() || level == NULL)
+             {
+-                char *ignore_names = var_InheritString(p_obj,
+-                                                       "decoder-ignore-profile");
+-                bool ignore_profile = MediaCodec_MatchDecoderList(
+-                    ignore_names, name_ptr, name_len, false);
+-                free(ignore_names);
+-                /* The mime type is matching for this component. We
+-                   now check if the capabilities of the codec is
+-                   matching the video format. */
+-                if (profile > 0 && !ignore_profile)
+-                {
+-                    /* This decoder doesn't expose its profiles and is high
+-                     * profile capable */
+-                    if (!strncmp(name_ptr, "OMX.LUMEVideoDecoder", __MIN(20, name_len)))
+-                        found = true;
+-
+-                    for (int i = 0; i < profile_levels_len && !found; ++i)
+-                    {
+-                        jobject profile_level = (*env)->GetObjectArrayElement(env, profile_levels, i);
+-
+-                        int omx_profile = (*env)->GetIntField(env, profile_level, jfields.profile_field);
+-                        (*env)->DeleteLocalRef(env, profile_level);
+-
+-                        int codec_profile =
+-                            convert_omx_to_profile_idc(codec, omx_profile);
+-                        if (codec_profile != profile)
+-                            continue;
+-                        /* Some encoders set the level too high, thus we ignore it for the moment.
+-                           We could try to guess the actual profile based on the resolution. */
+-                        found = true;
+-                    }
+-                }
+-                else
+-                    found = true;
++                if (level != NULL)
++                    (*env)->DeleteLocalRef(env, level);
++                goto error;
+             }
+-            (*env)->DeleteLocalRef(env, type);
++            int omx_profile = (*env)->GetIntField(env, level, jfields.profile_field);
++            bool exception = CHECK_EXCEPTION();
++            (*env)->DeleteLocalRef(env, level);
++            if (exception)
++                goto error;
++            found = convert_omx_to_profile_idc(ctx->codec, omx_profile)
++                    == request->profile;
+         }
+         if (found)
+         {
+-            msg_Dbg(p_obj, "using %.*s", name_len, name_ptr);
+-            psz_name = malloc(name_len + 1);
+-            if (psz_name)
++            /* Amazon MTK components report the Surface size, not video size.
++             * Disable adaptive mode so the bitstream parser supplies the size. */
++            bool ignore_size = false;
++            static const char mtk_dec[] = "OMX.MTK.VIDEO.DECODER.";
++            if (strncmp(name_ptr, mtk_dec, sizeof(mtk_dec) - 1) == 0)
+             {
+-                memcpy(psz_name, name_ptr, name_len);
+-                psz_name[name_len] = '\0';
+-
+-                bool ignore_size = false;
+-
+-                /* The AVC/HEVC MediaCodec implementation on Amazon fire TV
+-                 * seems to report the Output surface size instead of the Video
+-                 * size. This bug is specific to Amazon devices since other MTK
+-                 * implementations report the correct size. The manufacturer is
+-                 * checked only if the codec matches the MTK one in order to
+-                 * avoid extra manufacturer check for other every devices.
+-                 * */
+-                static const char mtk_dec[] = "OMX.MTK.VIDEO.DECODER.";
+-                if (strncmp(psz_name, mtk_dec, sizeof(mtk_dec) - 1) == 0)
+-                {
+-                    char *manufacturer = GetManufacturer(env);
+-                    if (manufacturer && strcmp(manufacturer, "Amazon") == 0)
+-                        ignore_size = true;
+-                    free(manufacturer);
+-                }
+-
+-                if (ignore_size)
+-                {
+-                    *p_quirks |= MC_API_VIDEO_QUIRKS_IGNORE_SIZE;
+-                    /* If the MediaCodec size is ignored, the adaptive mode
+-                     * should be disabled in order to trigger the hxxx_helper
+-                     * parsers that will parse the correct video size. Hence
+-                     * the following 'else if' */
+-                }
+-                else if (b_adaptive)
+-                    *p_quirks |= MC_API_VIDEO_QUIRKS_ADAPTIVE;
++                char *manufacturer = GetManufacturer(env);
++                if (manufacturer == NULL)
++                    goto error;
++                if (strcmp(manufacturer, "Amazon") == 0)
++                    ignore_size = true;
++                free(manufacturer);
+             }
++            if (ignore_size)
++                quirks |= MC_API_VIDEO_QUIRKS_IGNORE_SIZE;
++            else if (b_adaptive)
++                quirks |= MC_API_VIDEO_QUIRKS_ADAPTIVE;
++            if (mc_candidates_offer(candidates, request, ctx->rules, ctx->failed,
++                                    name_ptr, false, quirks) != 0)
++                ret = VLC_ENOMEM;
++            else
++                msg_Dbg(p_obj, "MediaCodec candidate: %s score=%"PRId64" mime=%s profile=%d",
++                        name_ptr, (int64_t)mc_candidate_score(ctx->rules, name_ptr)
++                                  + request->bonus, request->mime, request->profile);
+         }
++        goto loopclean;
++error:
++        msg_Warn(p_obj, "MediaCodec enumeration failed for %s", request->mime);
++        ret = VLC_EGENERIC;
+ loopclean:
+-        if (name)
+-        {
++        if (name_ptr != NULL)
+             (*env)->ReleaseStringUTFChars(env, name, name_ptr);
++        if (name)
+             (*env)->DeleteLocalRef(env, name);
+-        }
+         if (profile_levels)
+             (*env)->DeleteLocalRef(env, profile_levels);
+         if (types)
+@@ -417,10 +443,67 @@ loopclean:
+             (*env)->DeleteLocalRef(env, codec_capabilities);
+         if (info)
+             (*env)->DeleteLocalRef(env, info);
+-        if (found)
++        if (ret != VLC_SUCCESS || (found && !ctx->video))
+             break;
+     }
++done:
+     (*env)->DeleteLocalRef(env, jmime);
++    return ret;
++}
+ 
+-    return psz_name;
++int MediaCodec_SelectCandidate(vlc_object_t *p_obj, vlc_fourcc_t codec,
++                              const struct mc_candidate_request *requests,
++                              size_t count, bool video, bool allow_relax,
++                              struct mc_candidate *result)
++{
++    *result = (struct mc_candidate) { 0 };
++    JNIEnv *env = android_getEnv(p_obj, THREAD_NAME);
++    if (env == NULL || !InitJNIFields(p_obj, env))
++        return VLC_EGENERIC;
++
++    struct mc_score_rule *rules = NULL;
++    char *failed = NULL, *ignore_names = NULL;
++    int ret;
++    if (video)
++    {
++        char *scores = var_InheritString(p_obj, "decoder-score-list");
++        unsigned invalid;
++        int parsed = mc_score_rules_parse(scores, &rules, &invalid);
++        free(scores);
++        if (parsed != 0)
++        {
++            ret = VLC_ENOMEM;
++            goto done;
++        }
++        if (invalid != 0)
++            msg_Warn(p_obj, "Ignoring %u invalid decoder score rules", invalid);
++        if (var_Type(p_obj, "mediacodec-failed-candidates") != 0)
++        {
++            failed = var_GetString(p_obj, "mediacodec-failed-candidates");
++            if (failed == NULL)
++            {
++                ret = VLC_ENOMEM;
++                goto done;
++            }
++        }
++    }
++    ignore_names = var_InheritString(p_obj, "decoder-ignore-profile");
++    struct mc_enumeration ctx = {
++        p_obj, env, codec, video, rules, failed, ignore_names,
++    };
++    bool relaxed;
++    ret = mc_candidates_select(requests, count, video && allow_relax,
++                               EnumerateCandidates, &ctx, result, &relaxed);
++    if (relaxed)
++        msg_Warn(p_obj, "MediaCodec: no strict profile candidate, retried without profile filtering");
++    if (ret == 1)
++        ret = VLC_ENOENT;
++    else if (ret == VLC_SUCCESS)
++        msg_Dbg(p_obj, "MediaCodec selected %s score=%"PRId64" mime=%s",
++                result->name, result->score, result->mime);
++done:
++    mc_score_rules_clear(rules);
++    free(failed);
++    free(ignore_names);
++    return ret;
+ }
+diff --git a/modules/codec/omxil/mediacodec_ndk.c b/modules/codec/omxil/mediacodec_ndk.c
+index ab65783b3d..8dc5a12fd8 100644
+--- a/modules/codec/omxil/mediacodec_ndk.c
++++ b/modules/codec/omxil/mediacodec_ndk.c
+@@ -38,6 +38,7 @@
+ #include "omxil_utils.h"
+ 
+ #include "mediacodec.h"
++#include "mediacodec_candidates.h"
+ 
+ static_assert(MC_API_NO_QUIRKS == OMXCODEC_NO_QUIRKS
+     && MC_API_QUIRKS_NEED_CSD == OMXCODEC_QUIRKS_NEED_CSD
+@@ -46,9 +47,6 @@ static_assert(MC_API_NO_QUIRKS == OMXCODEC_NO_QUIRKS
+     && MC_API_AUDIO_QUIRKS_NEED_CHANNELS == OMXCODEC_AUDIO_QUIRKS_NEED_CHANNELS,
+     "mediacodec.h/omx_utils.h mismatch");
+ 
+-char* MediaCodec_GetName(vlc_object_t *p_obj, vlc_fourcc_t codec,
+-                         const char *psz_mime, int profile, int *p_quirks);
+-
+ #define THREAD_NAME "mediacodec_ndk"
+ 
+ /* Not in NdkMedia API but we need it since we send config data via input
+@@ -143,7 +141,7 @@ static int ConfigureDecoder(mc_api *api, union mc_api_args *p_args)
+     if (!p_sys->p_format)
+     {
+         msg_Err(api->p_obj, "AMediaFormat.new failed");
+-        return MC_API_ERROR;
++        return VLC_ENOMEM;
+     }
+ 
+     if (p_args->video.b_low_latency)
+@@ -479,15 +477,22 @@ static void Clean(mc_api *api)
+ /*****************************************************************************
+  * Prepare
+  *****************************************************************************/
+-static int Prepare(mc_api * api, int i_profile)
++static int Prepare(mc_api *api, const struct mc_candidate_request *requests,
++                   size_t count, bool allow_relax)
+ {
+     free(api->psz_name);
++    api->psz_name = NULL;
+ 
+     api->i_quirks = 0;
+-    api->psz_name = MediaCodec_GetName(api->p_obj, api->i_codec, api->psz_mime,
+-                                       i_profile, &api->i_quirks);
+-    if (!api->psz_name)
+-        return MC_API_ERROR;
++    struct mc_candidate selected;
++    int ret = MediaCodec_SelectCandidate(api->p_obj, api->i_codec, requests,
++                                         count, api->i_cat == VIDEO_ES,
++                                         allow_relax, &selected);
++    if (ret != VLC_SUCCESS)
++        return ret;
++    api->psz_name = selected.name;
++    api->psz_mime = selected.mime;
++    api->i_quirks = selected.quirks;
+     api->i_quirks |= OMXCodec_GetQuirks(api->i_cat, api->i_codec, api->psz_name,
+                                         strlen(api->psz_name));
+     /* Allow interlaced picture after API 21 */
+diff --git a/test/Makefile.am b/test/Makefile.am
+index 5b056cf008..c90ed66fdd 100644
+--- a/test/Makefile.am
++++ b/test/Makefile.am
+@@ -96,6 +96,10 @@ check_PROGRAMS = \
+ 
+ check_PROGRAMS += $(player_programs)
+ 
++if !HAVE_WIN32
++check_PROGRAMS += test_modules_codec_mediacodec_candidates
++endif
++
+ if HAVE_GL
+ check_PROGRAMS += \
+ 	test_modules_video_output_opengl_filters \
+@@ -353,6 +357,7 @@ test_modules_packetizer_mpegvideo_LDADD = $(LIBVLCCORE) $(LIBVLC)
+ test_modules_keystore_SOURCES = modules/keystore/test.c
+ test_modules_codec_mediacodec_profile_SOURCES = modules/codec/mediacodec_profile.c
+ test_modules_codec_mediacodec_profile_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)/../include
++test_modules_codec_mediacodec_candidates_SOURCES = modules/codec/mediacodec_candidates.c
+ test_modules_demux_mkv_dolby_vision_SOURCES = modules/demux/mkv_dolby_vision.cpp
+ test_modules_keystore_LDADD = $(LIBVLCCORE) $(LIBVLC)
+ test_modules_tls_SOURCES = modules/misc/tls.c
+diff --git a/test/modules/codec/mediacodec_candidates.c b/test/modules/codec/mediacodec_candidates.c
+new file mode 100644
+index 0000000000..de102155ab
+--- /dev/null
++++ b/test/modules/codec/mediacodec_candidates.c
+@@ -0,0 +1,440 @@
++/* Copyright (C) 2026 VLC authors and VideoLAN
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++#ifdef HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#undef NDEBUG
++#include <assert.h>
++#include <stdbool.h>
++#include <stdlib.h>
++#include <string.h>
++
++static int allocation_budget = -1;
++
++static bool FailAllocation(void)
++{
++    if (allocation_budget < 0)
++        return false;
++    if (allocation_budget == 0)
++        return true;
++    allocation_budget--;
++    return false;
++}
++
++static void *TestMalloc(size_t size)
++{
++    return FailAllocation() ? NULL : malloc(size);
++}
++
++static void *TestRealloc(void *ptr, size_t size)
++{
++    return FailAllocation() ? NULL : realloc(ptr, size);
++}
++
++static char *TestStrdup(const char *text)
++{
++    return FailAllocation() ? NULL : strdup(text);
++}
++
++#define malloc TestMalloc
++#define realloc TestRealloc
++#define strdup TestStrdup
++#include "../../../modules/codec/omxil/mediacodec_candidates.h"
++#undef malloc
++#undef realloc
++#undef strdup
++
++static void TestScores(void)
++{
++    struct mc_score_rule *rules;
++    unsigned invalid;
++    assert(mc_score_rules_parse(NULL, &rules, &invalid) == 0);
++    assert(rules == NULL && invalid == 0);
++    assert(mc_candidate_score(rules, "OMX.vendor.hevc") == 100);
++
++    assert(mc_score_rules_parse(
++        " ^OMX\\.vendor\\.hevc$ = 100, ^OMX\\.vendor\\. = 20,"
++        "^OMX\\.google\\.=-10,^c2\\.=+5", &rules, &invalid) == 0);
++    assert(invalid == 0);
++    assert(mc_candidate_score(rules, "OMX.vendor.hevc") == 100);
++    assert(mc_candidate_score(rules, "OMX.vendor.avc") == 20);
++    assert(mc_candidate_score(rules, "OMX.google.hevc") == -10);
++    assert(mc_candidate_score(rules, "c2.vendor.hevc") == 5);
++    assert(mc_candidate_score(rules, "omx.vendor.hevc") == 100);
++    mc_score_rules_clear(rules);
++
++    /* Invalid regexes/numbers do not prevent subsequent rules from working. */
++    assert(mc_score_rules_parse(
++        "[=3,x=,y=no,z=999999999999999999999999999999999,"
++        "=5,bare,x=2x,^valid$=7", &rules, &invalid) == 0);
++    assert(invalid == 7);
++    assert(mc_candidate_score(rules, "valid") == 7);
++    assert(mc_candidate_score(rules, "x") == 100);
++    mc_score_rules_clear(rules);
++
++    assert(mc_score_rules_parse(".*=-2147483648,^x$=2147483647",
++                                &rules, &invalid) == 0);
++    assert(invalid == 0);
++    /* First matching rule wins, not the largest matching score. */
++    assert(mc_candidate_score(rules, "x") == INT_MIN);
++    mc_score_rules_clear(rules);
++}
++
++static void TestOrdering(void)
++{
++    struct mc_candidates list = { 0 };
++    assert(mc_candidates_add(&list, "first", "video/hevc", 0, 1) == 0);
++    assert(mc_candidates_add(&list, "second", "video/hevc", 0, 2) == 0);
++    assert(mc_candidates_add(&list, "last", "video/hevc", INT_MIN, 3) == 0);
++    assert(mc_candidates_add(&list, "preferred", "video/hevc", INT_MAX, 4) == 0);
++    assert(mc_candidates_add(&list, "second", "video/hevc", 999, 99) == 0);
++    assert(list.count == 4);
++    assert(strcmp(list.data[0].name, "preferred") == 0);
++    assert(strcmp(list.data[1].name, "second") == 0);
++    assert(strcmp(list.data[2].name, "first") == 0);
++    assert(strcmp(list.data[3].name, "last") == 0);
++    assert(list.data[1].score == 999 && list.data[1].quirks == 99);
++    mc_candidates_clear(&list);
++    assert(list.count == 0 && list.data == NULL);
++    mc_candidates_clear(&list);
++}
++
++static void TestFailureSet(void)
++{
++    const char *dolby = "video/dolby-vision", *hevc = "video/hevc";
++    char *failed = mc_candidate_fail(NULL, dolby, "vendor.dual");
++    assert(failed != NULL);
++    assert(mc_candidate_failed(failed, dolby, "vendor.dual"));
++    assert(!mc_candidate_failed(failed, hevc, "vendor.dual"));
++    assert(!mc_candidate_failed(failed, dolby, "vendor.dual.extra"));
++    assert(!mc_candidate_failed(failed, dolby, "vendor"));
++    char *next = mc_candidate_fail(failed, dolby, "vendor.dual");
++    assert(next != NULL && strcmp(next, failed) == 0);
++    free(next);
++    next = mc_candidate_fail(failed, hevc, "vendor.hevc");
++    assert(next != NULL);
++    free(failed);
++    failed = next;
++    /* A copied string models state surviving module teardown/reload. */
++    next = strdup(failed);
++    assert(next != NULL);
++    free(failed);
++    assert(mc_candidate_failed(next, dolby, "vendor.dual"));
++    assert(mc_candidate_failed(next, hevc, "vendor.hevc"));
++    assert(!mc_candidate_failed(NULL, dolby, "vendor.dual"));
++    assert(!mc_candidate_failed("incomplete", hevc, "vendor.hevc"));
++    free(next);
++}
++
++struct mock_component
++{
++    const char *name;
++    const char *mime;
++    int profile;
++    int quirks;
++    bool blacklisted;
++};
++
++struct mock_enumeration
++{
++    const struct mock_component *components;
++    size_t count;
++    const struct mc_score_rule *rules;
++    const char *failed;
++    unsigned calls;
++    unsigned fail_call;
++};
++
++/* Replace only device enumeration, exercising the production selection and
++ * exclusion helpers for both passes and every reload. */
++static int MockEnumerate(void *opaque, const struct mc_candidate_request *request,
++                         struct mc_candidates *list)
++{
++    struct mock_enumeration *ctx = opaque;
++    if (++ctx->calls == ctx->fail_call)
++        return -77;
++    for (size_t i = 0; i < ctx->count; i++)
++    {
++        const struct mock_component *component = &ctx->components[i];
++        if (strcmp(request->mime, component->mime) != 0 ||
++            (request->profile > 0 && request->profile != component->profile))
++            continue;
++        bool required = request->required_mime == NULL;
++        for (size_t j = 0; j < ctx->count && !required; j++)
++            required = strcmp(component->name, ctx->components[j].name) == 0 &&
++                       strcmp(request->required_mime, ctx->components[j].mime) == 0;
++        if (required && mc_candidates_offer(list, request, ctx->rules, ctx->failed,
++                         component->name, component->blacklisted,
++                         component->quirks) != 0)
++            return -2;
++    }
++    return 0;
++}
++
++#define DOLBY "video/dolby-vision"
++#define HEVC "video/hevc"
++static const struct mock_component mixed_components[] = {
++    { "dv_only", DOLBY, -1, 1, false },
++    { "dual", DOLBY, -1, 2, false },
++    { "dual", HEVC, 2, 3, false },
++    { "base", HEVC, 2, 4, false },
++    { "dual", DOLBY, -1, 99, false }, /* duplicate: retain original quirks */
++    { "blocked", DOLBY, -1, 5, true },
++    { "blocked", HEVC, 2, 6, true },
++};
++
++static void TestMixedSelection(void)
++{
++    struct mc_candidate_request requests[3];
++    size_t count = mc_candidate_requests(requests, DOLBY, -1, HEVC, 2);
++    assert(count == 3);
++    struct mock_enumeration ctx = {
++        .components = mixed_components,
++        .count = sizeof(mixed_components) / sizeof(mixed_components[0]),
++    };
++    struct mc_candidate result;
++    bool relaxed;
++    char *failed = NULL;
++    const char *expected_names[] = { "dual", "dv_only", "dual", "base" };
++    const char *expected_mimes[] = { DOLBY, DOLBY, HEVC, HEVC };
++    const int expected_quirks[] = { 2, 1, 3, 4 };
++    const int expected_scores[] = { 600, 500, 100, 100 };
++    for (unsigned i = 0; i < 4; i++)
++    {
++        ctx.failed = failed;
++        ctx.calls = 0;
++        assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                     &result, &relaxed) == 0);
++        assert(!relaxed && ctx.calls == 3);
++        assert(strcmp(result.name, expected_names[i]) == 0);
++        assert(strcmp(result.mime, expected_mimes[i]) == 0);
++        assert(result.quirks == expected_quirks[i]);
++        assert(result.score == expected_scores[i]);
++        char *next = mc_candidate_fail(failed, result.mime, result.name);
++        assert(next != NULL);
++        free(failed);
++        failed = next;
++        free(result.name);
++    }
++    ctx.failed = failed;
++    ctx.calls = 0;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 1);
++    assert(relaxed && ctx.calls == 6 && result.name == NULL);
++    free(failed);
++    ctx.failed = NULL;
++
++    struct mc_score_rule *rules;
++    unsigned invalid;
++    assert(mc_score_rules_parse("^base$=900,^blocked$=2147483647",
++                                &rules, &invalid) == 0 && invalid == 0);
++    ctx.rules = rules;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(strcmp(result.name, "base") == 0 && strcmp(result.mime, HEVC) == 0);
++    free(result.name);
++    mc_score_rules_clear(rules);
++
++    /* A rule scoring 50 ranks below the unmatched default of 100. */
++    struct mc_candidates list = { 0 };
++    struct mc_candidate_request base_request = { HEVC, 2, 0, NULL };
++    assert(mc_score_rules_parse("^custom$=50", &rules, &invalid) == 0);
++    assert(mc_candidates_offer(&list, &base_request, rules, NULL,
++                                "custom", false, 1) == 0);
++    assert(mc_candidates_offer(&list, &base_request, rules, NULL,
++                                "default", false, 2) == 0);
++    assert(list.count == 2 && strcmp(list.data[0].name, "default") == 0);
++    mc_candidates_clear(&list);
++    mc_score_rules_clear(rules);
++
++    /* Equal totals retain group order, even across different MIME types. */
++    assert(mc_score_rules_parse("^base$=600,^dv_only$=200", &rules, &invalid) == 0);
++    ctx.rules = rules;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(strcmp(result.name, "dual") == 0 && strcmp(result.mime, DOLBY) == 0);
++    free(result.name);
++    mc_score_rules_clear(rules);
++
++    /* A negative name score must be rejected before adding 500 or 400. */
++    assert(mc_score_rules_parse("^dual$=-1,^dv_only$=-2147483648",
++                                &rules, &invalid) == 0);
++    ctx.rules = rules;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(strcmp(result.name, "base") == 0);
++    free(result.name);
++    mc_score_rules_clear(rules);
++
++    assert(mc_score_rules_parse("^dual$=2147483647", &rules, &invalid) == 0);
++    ctx.rules = rules;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(result.score == (int64_t)INT_MAX + 500);
++    free(result.name);
++    mc_score_rules_clear(rules);
++    ctx.rules = NULL;
++
++    /* Retry disabled: one MIME, no base-layer candidate even when DV fails. */
++    count = mc_candidate_requests(requests, DOLBY, -1, NULL, 2);
++    assert(count == 1);
++    failed = mc_candidate_fail(NULL, DOLBY, "dv_only");
++    assert(failed != NULL);
++    ctx.failed = mc_candidate_fail(failed, DOLBY, "dual");
++    assert(ctx.failed != NULL);
++    free(failed);
++    ctx.calls = 0;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 1);
++    assert(!relaxed && ctx.calls == 1);
++    free((char *)ctx.failed);
++}
++
++static void TestProfileRelaxation(void)
++{
++    const struct mock_component components[] = {
++        { "underreported", HEVC, 1, 7, false },
++        { "compatible", HEVC, 2, 8, false },
++        { "dolby", DOLBY, -1, 9, false },
++    };
++    struct mock_enumeration ctx = { .components = components, .count = 2 };
++    struct mc_candidate_request requests[3];
++    size_t count = mc_candidate_requests(requests, HEVC, 2, NULL, 0);
++    struct mc_candidate result;
++    bool relaxed;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(!relaxed && ctx.calls == 1);
++    assert(strcmp(result.name, "compatible") == 0 && result.quirks == 8);
++    free(result.name);
++
++    ctx.count = 1;
++    ctx.calls = 0;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(relaxed && ctx.calls == 2 && requests[0].profile == 2);
++    assert(strcmp(result.name, "underreported") == 0 && result.quirks == 7);
++    free(result.name);
++    ctx.calls = 0;
++    assert(mc_candidates_select(requests, count, false, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 1);
++    assert(!relaxed && ctx.calls == 1 && result.name == NULL);
++
++    /* Negative scores and prior failures still apply after relaxing profiles. */
++    struct mc_score_rule *rules;
++    unsigned invalid;
++    assert(mc_score_rules_parse("underreported=-1", &rules, &invalid) == 0);
++    ctx.rules = rules;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 1);
++    assert(relaxed && result.name == NULL);
++    mc_score_rules_clear(rules);
++    ctx.rules = NULL;
++    ctx.failed = mc_candidate_fail(NULL, HEVC, "underreported");
++    assert(ctx.failed != NULL);
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 1);
++    assert(relaxed && result.name == NULL);
++    free((char *)ctx.failed);
++
++    /* Relax only when the WHOLE strict pool is empty, not each MIME alone. */
++    ctx.count = 3;
++    ctx.failed = mc_candidate_fail(NULL, HEVC, "compatible");
++    assert(ctx.failed != NULL);
++    ctx.calls = 0;
++    count = mc_candidate_requests(requests, DOLBY, -1, HEVC, 2);
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(!relaxed && ctx.calls == 3 && strcmp(result.mime, DOLBY) == 0);
++    free(result.name);
++    char *failed = mc_candidate_fail(ctx.failed, DOLBY, "dolby");
++    assert(failed != NULL);
++    free((char *)ctx.failed);
++    ctx.failed = failed;
++    ctx.calls = 0;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == 0);
++    assert(relaxed && ctx.calls == 6 && strcmp(result.mime, HEVC) == 0);
++    assert(strcmp(result.name, "underreported") == 0);
++    free(result.name);
++    free(failed);
++}
++
++static void TestEnumerationErrors(void)
++{
++    struct mock_enumeration ctx = {
++        .components = mixed_components,
++        .count = sizeof(mixed_components) / sizeof(mixed_components[0]),
++    };
++    struct mc_candidate_request requests[3];
++    size_t count = mc_candidate_requests(requests, DOLBY, -1, HEVC, 2);
++    struct mc_candidate result;
++    bool relaxed;
++    for (unsigned fail = 1; fail <= 3; fail++)
++    {
++        ctx.calls = 0;
++        ctx.fail_call = fail;
++        assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                     &result, &relaxed) == -77);
++        assert(ctx.calls == fail && !relaxed && result.name == NULL);
++    }
++    ctx.count = 0;
++    ctx.calls = 0;
++    ctx.fail_call = 4;
++    assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                 &result, &relaxed) == -77);
++    assert(relaxed && ctx.calls == 4 && result.name == NULL);
++    ctx.count = sizeof(mixed_components) / sizeof(mixed_components[0]);
++    ctx.fail_call = 0;
++    /* Fail at every name-copy/reallocation point, including after some
++     * candidates were already accumulated in earlier MIME requests. */
++    for (int budget = 0; budget < 8; budget++)
++    {
++        ctx.calls = 0;
++        allocation_budget = budget;
++        assert(mc_candidates_select(requests, count, true, MockEnumerate, &ctx,
++                                     &result, &relaxed) == -2);
++        assert(!relaxed && result.name == NULL);
++    }
++    allocation_budget = -1;
++}
++
++static void TestAllocationFailures(void)
++{
++    struct mc_candidates list = { 0 };
++    assert(mc_candidates_add(&list, "keep", "video/hevc", 0, 1) == 0);
++    for (int budget = 0; budget < 2; budget++)
++    {
++        allocation_budget = budget;
++        assert(mc_candidates_add(&list, "new", "video/hevc", 1, 2) != 0);
++        assert(list.count == 1 && strcmp(list.data[0].name, "keep") == 0);
++    }
++    allocation_budget = -1;
++    mc_candidates_clear(&list);
++
++    for (int budget = 0; budget < 3; budget++)
++    {
++        struct mc_score_rule *rules;
++        unsigned invalid;
++        allocation_budget = budget;
++        assert(mc_score_rules_parse("a=1,b=2", &rules, &invalid) != 0);
++        assert(rules == NULL);
++    }
++    allocation_budget = 0;
++    assert(mc_candidate_fail(NULL, "video/hevc", "codec") == NULL);
++    allocation_budget = -1;
++}
++
++int main(void)
++{
++    TestScores();
++    TestOrdering();
++    TestFailureSet();
++    TestAllocationFailures();
++    TestMixedSelection();
++    TestProfileRelaxation();
++    TestEnumerationErrors();
++    return 0;
++}
+-- 
+2.56.0
